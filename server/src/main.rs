@@ -54,13 +54,13 @@ async fn main() {
                 // https://github.com/rksm/axum-yew-setup/commit/a48abfc8a2947b226cc47cbb3001c8a68a0bb25e
                 StatusCode::NOT_FOUND => {
                     let index_path = PathBuf::from(&opt.static_dir).join("index.html");
-                    fs::read_to_string(index_path)
-                        .await
-                        .map(|index_content| (StatusCode::OK, Html(index_content)).into_response())
-                        .unwrap_or_else(|_| {
+                    fs::read_to_string(index_path).await.map_or_else(
+                        |_| {
                             (StatusCode::INTERNAL_SERVER_ERROR, "index.html not found")
                                 .into_response()
-                        })
+                        },
+                        |index_content| (StatusCode::OK, Html(index_content)).into_response(),
+                    )
                 }
 
                 // path was found as a file in the static dir

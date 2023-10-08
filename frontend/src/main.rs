@@ -40,14 +40,14 @@ fn hello_server() -> Html {
                 spawn_local(async move {
                     let resp = Request::get("/api/hello").send().await.unwrap();
                     let result = {
-                        if !resp.ok() {
+                        if resp.ok() {
+                            resp.text().await.map_err(|err| err.to_string())
+                        } else {
                             Err(format!(
                                 "Error fetching data {} ({})",
                                 resp.status(),
                                 resp.status_text()
                             ))
-                        } else {
-                            resp.text().await.map_err(|err| err.to_string())
                         }
                     };
                     data.set(Some(result));
