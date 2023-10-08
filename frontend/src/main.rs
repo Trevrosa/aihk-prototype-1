@@ -11,6 +11,7 @@ enum Route {
     HelloServer,
 }
 
+#[allow(clippy::needless_pass_by_value)]
 fn switch(routes: Route) -> Html {
     match routes {
         Route::Home => html! { <h1>{ "Hello Frontend" }</h1> },
