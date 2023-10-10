@@ -17,7 +17,7 @@ use tower_http::trace::TraceLayer;
 
 // Setup the command line interface with clap.
 #[derive(Parser, Debug)]
-#[clap(name = "server", about = "A server for our wasm project!")]
+#[clap(name = "server", about = "Server")]
 struct Opt {
     /// set the log level
     #[clap(short = 'l', long = "log", default_value = "debug")]

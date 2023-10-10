@@ -7,8 +7,11 @@ use yew_router::prelude::*;
 enum Route {
     #[at("/")]
     Home,
-    #[at("/hello-server")]
+    #[at("/hello")]
     HelloServer,
+    #[not_found]
+    #[at("/404")]
+    NotFound,
 }
 
 #[allow(clippy::needless_pass_by_value)]
@@ -16,6 +19,7 @@ fn switch(routes: Route) -> Html {
     match routes {
         Route::Home => html! { <h1>{ "Hello Frontend" }</h1> },
         Route::HelloServer => html! { <HelloServer /> },
+        Route::NotFound => html! { <h1 style="text-align: center;">{ "404 Not Found" }</h1> },
     }
 }
 
@@ -28,6 +32,21 @@ fn app() -> Html {
     }
 }
 
+async fn get_api(path: &str) -> Option<Result<String, String>> {
+    let resp = Request::get(path).send().await.unwrap();
+    let resp = if resp.ok() {
+        resp.text().await.map_err(|err| err.to_string())
+    } else {
+        Err(format!(
+            "Error fetching data {} ({})",
+            resp.status(),
+            resp.status_text()
+        ))
+    };
+
+    Some(resp)
+}
+
 #[function_component(HelloServer)]
 fn hello_server() -> Html {
     let data = use_state(|| None);
@@ -38,23 +57,9 @@ fn hello_server() -> Html {
         use_effect(move || {
             if data.is_none() {
                 spawn_local(async move {
-                    let resp = Request::get("/api/hello").send().await.unwrap();
-                    let result = {
-                        if resp.ok() {
-                            resp.text().await.map_err(|err| err.to_string())
-                        } else {
-                            Err(format!(
-                                "Error fetching data {} ({})",
-                                resp.status(),
-                                resp.status_text()
-                            ))
-                        }
-                    };
-                    data.set(Some(result));
+                    data.set(get_api("/api/hello").await);
                 });
             }
-
-            || {}
         });
     }
 
