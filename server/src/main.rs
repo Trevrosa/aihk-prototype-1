@@ -1,8 +1,16 @@
+use axum::body::Body;
+use axum::http::{Request, StatusCode};
+use axum::response::Html;
 use axum::{response::IntoResponse, routing::get, Router};
+
 use clap::Parser;
+
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};
+use std::path::PathBuf;
 use std::str::FromStr;
+
 use tokio::fs;
+
 use tower::{ServiceBuilder, ServiceExt};
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
@@ -45,9 +53,6 @@ async fn main() {
             let res = ServeDir::new(&opt.static_dir).oneshot(req).await.unwrap(); // serve dir is infallible
             let status = res.status();
             match status {
-                // If we don't find a file corresponding to the path we serve index.html.
-                // If you want to serve a 404 status code instead you can add a route check as shown in
-                // https://github.com/rksm/axum-yew-setup/commit/a48abfc8a2947b226cc47cbb3001c8a68a0bb25e
                 StatusCode::NOT_FOUND => {
                     let index_path = PathBuf::from(&opt.static_dir).join("index.html");
                     fs::read_to_string(index_path).await.map_or_else(
