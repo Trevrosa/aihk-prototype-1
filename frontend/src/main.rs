@@ -1,6 +1,5 @@
-use gloo_net::http::{Request, Response};
+use gloo_net::http::Request;
 use wasm_bindgen_futures::spawn_local;
-
 use yew::prelude::*;
 use yew_router::prelude::*;
 
@@ -10,17 +9,13 @@ enum Route {
     Home,
     #[at("/hello-server")]
     HelloServer,
-    #[not_found]
-    #[at("/404")]
-    NotFound,
 }
 
 #[allow(clippy::needless_pass_by_value)]
 fn switch(routes: Route) -> Html {
     match routes {
         Route::Home => html! { <h1>{ "Hello Frontend" }</h1> },
-        Route::HelloServer => html! { <HelloServer/> },
-        Route::NotFound => html! { <h1>{ "Not found" }</h1> },
+        Route::HelloServer => html! { <HelloServer /> },
     }
 }
 
@@ -33,18 +28,6 @@ fn app() -> Html {
     }
 }
 
-async fn proc_res(resp: Response) -> Result<String, String> {
-    if resp.ok() {
-        resp.text().await.map_err(|err| err.to_string())
-    } else {
-        Err(format!(
-            "Error fetching data {} ({})",
-            resp.status(),
-            resp.status_text()
-        ))
-    }
-}
-
 #[function_component(HelloServer)]
 fn hello_server() -> Html {
     let data = use_state(|| None);
@@ -53,15 +36,25 @@ fn hello_server() -> Html {
     {
         let data = data.clone();
         use_effect(move || {
-            if !data.is_none() {
-                return
+            if data.is_none() {
+                spawn_local(async move {
+                    let resp = Request::get("/api/hello").send().await.unwrap();
+                    let result = {
+                        if resp.ok() {
+                            resp.text().await.map_err(|err| err.to_string())
+                        } else {
+                            Err(format!(
+                                "Error fetching data {} ({})",
+                                resp.status(),
+                                resp.status_text()
+                            ))
+                        }
+                    };
+                    data.set(Some(result));
+                });
             }
-            
-            spawn_local(async move {
-                let resp: Response = Request::get("/api/hello").send().await.unwrap();
-                let result: Result<String, String> = proc_res(resp).await;
-                data.set(Some(result));
-            });
+
+            || {}
         });
     }
 
