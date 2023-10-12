@@ -64,7 +64,7 @@ async fn main() {
         .layer(ServiceBuilder::new().layer(TraceLayer::new_for_http()));
 
     let sock_addr = SocketAddr::from((
-        IpAddr::from_str("::1").unwrap_or(IpAddr::V6(Ipv6Addr::LOCALHOST)),
+        IpAddr::from_str("127.0.0.1").unwrap_or(IpAddr::V6(Ipv6Addr::LOCALHOST)),
         opt.port,
     ));
 
