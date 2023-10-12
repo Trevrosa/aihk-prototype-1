@@ -23,10 +23,6 @@ struct Opt {
     #[clap(short = 'l', long = "log", default_value = "debug")]
     log_level: String,
 
-    /// set the listen addr
-    #[clap(short = 'a', long = "addr", default_value = "::1")]
-    addr: String,
-
     /// set the listen port
     #[clap(short = 'p', long = "port", default_value = "8080")]
     port: u16,
@@ -56,10 +52,7 @@ async fn main() {
                 StatusCode::NOT_FOUND => {
                     let index_path = PathBuf::from(&opt.static_dir).join("index.html");
                     fs::read_to_string(index_path).await.map_or_else(
-                        |_| {
-                            (StatusCode::INTERNAL_SERVER_ERROR, "index.html not found")
-                                .into_response()
-                        },
+                        |_| (StatusCode::NOT_FOUND, "index.html not found").into_response(),
                         |index_content| (StatusCode::OK, Html(index_content)).into_response(),
                     )
                 }
@@ -71,7 +64,7 @@ async fn main() {
         .layer(ServiceBuilder::new().layer(TraceLayer::new_for_http()));
 
     let sock_addr = SocketAddr::from((
-        IpAddr::from_str(opt.addr.as_str()).unwrap_or(IpAddr::V6(Ipv6Addr::LOCALHOST)),
+        IpAddr::from_str("::1").unwrap_or(IpAddr::V6(Ipv6Addr::LOCALHOST)),
         opt.port,
     ));
 

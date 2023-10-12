@@ -1,4 +1,4 @@
-use gloo_net::http::Request;
+use gloo_net::http::{Request, Response};
 use wasm_bindgen_futures::spawn_local;
 use yew::prelude::*;
 use yew_router::prelude::*;
@@ -7,8 +7,6 @@ use yew_router::prelude::*;
 enum Route {
     #[at("/")]
     Home,
-    #[at("/hello")]
-    HelloServer,
     #[not_found]
     #[at("/404")]
     NotFound,
@@ -17,39 +15,21 @@ enum Route {
 #[allow(clippy::needless_pass_by_value)]
 fn switch(routes: Route) -> Html {
     match routes {
-        Route::Home => html! { <h1>{ "Hello Frontend" }</h1> },
-        Route::HelloServer => html! { <HelloServer /> },
-        Route::NotFound => html! { <h1 style="text-align: center;">{ "404 Not Found" }</h1> },
+        Route::Home => html! {
+            <div>
+                <h1>{ "Hello Frontend" }</h1>
+                <HelloServer/>
+            </div>
+        },
+        Route::NotFound => html! {
+            <h1 style="text-align: center;">{ "404 Not Found" }</h1>
+        },
     }
-}
-
-#[function_component(App)]
-fn app() -> Html {
-    html! {
-        <BrowserRouter>
-            <Switch<Route> render={switch} />
-        </BrowserRouter>
-    }
-}
-
-async fn get_api(path: &str) -> Option<Result<String, String>> {
-    let resp = Request::get(path).send().await.unwrap();
-    let resp = if resp.ok() {
-        resp.text().await.map_err(|err| err.to_string())
-    } else {
-        Err(format!(
-            "Error fetching data {} ({})",
-            resp.status(),
-            resp.status_text()
-        ))
-    };
-
-    Some(resp)
 }
 
 #[function_component(HelloServer)]
 fn hello_server() -> Html {
-    let data = use_state(|| None);
+    let data: UseStateHandle<Option<Result<String, String>>> = use_state(|| None);
 
     // Request `/api/hello` once
     {
@@ -63,20 +43,49 @@ fn hello_server() -> Html {
         });
     }
 
-    match data.as_ref() {
+    process_api_data(data.as_ref())
+}
+
+#[function_component(App)]
+fn app() -> Html {
+    html! {
+        <BrowserRouter>
+            <Switch<Route> render={switch} />
+        </BrowserRouter>
+    }
+}
+
+async fn get_api(path: &str) -> Option<Result<String, String>> {
+    let resp: Response = Request::get(path).send().await.unwrap();
+
+    let resp: Result<String, String> = if resp.ok() {
+        resp.text().await.map_err(|err| err.to_string())
+    } else {
+        Err(format!(
+            "Error fetching data {} ({})",
+            resp.status(),
+            resp.status_text()
+        ))
+    };
+
+    Some(resp)
+}
+
+fn process_api_data(data: Option<&Result<String, String>>) -> Html {
+    match data {
         None => {
             html! {
-                <div>{"No server response"}</div>
+                <p>{ "not found" }</p>
             }
         }
         Some(Ok(data)) => {
             html! {
-                <div>{"Got server response: "}{data}</div>
+                <p>{data}</p>
             }
         }
         Some(Err(err)) => {
             html! {
-                <div>{"Error requesting data from server: "}{err}</div>
+                <p>{err}</p>
             }
         }
     }
