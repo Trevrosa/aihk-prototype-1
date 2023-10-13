@@ -21,12 +21,30 @@ fn switch(routes: Route) -> Html {
                 <h1>{ "Hello Frontend" }</h1>
                 <HelloServer/>
                 <HelloPython/>
+                <HelloPYO3/>
             </div>
         },
         Route::NotFound => html! {
             <h1 style="text-align: center;">{ "404 Not Found" }</h1>
         },
     }
+}
+
+#[function_component(HelloPYO3)]
+fn hello_pyo3() -> Html {
+    let data = use_state(|| None);
+    {
+        let data = data.clone();
+        use_effect(move || {
+            if data.is_none() {
+                spawn_local(async move {
+                    data.set(get_api("/api/pyo3").await);
+                });
+            }
+        });
+    }
+
+    process_api_data(data.as_ref())
 }
 
 #[function_component(HelloPython)]
@@ -37,7 +55,7 @@ fn hello_python() -> Html {
         use_effect(move || {
             if data.is_none() {
                 spawn_local(async move {
-                    data.set(get_api("/api/py").await);
+                    data.set(get_api("/api/python").await);
                 });
             }
         });

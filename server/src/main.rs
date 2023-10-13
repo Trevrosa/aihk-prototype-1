@@ -15,6 +15,9 @@ use tower::{ServiceBuilder, ServiceExt};
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
 
+use pyo3::prelude::*;
+
+#[allow(clippy::unused_async)]
 // Setup the command line interface with clap.
 #[derive(Parser, Debug)]
 #[clap(name = "server", about = "Server")]
@@ -45,7 +48,8 @@ async fn main() {
 
     let app = Router::new()
         .route("/api/hello", get(hello))
-        .route("/api/py", get(python))
+        .route("/api/python", get(python))
+        .route("/api/pyo3", get(pyo3))
         .fallback_service(get(|req: Request<Body>| async move {
             let res = ServeDir::new(&opt.static_dir).oneshot(req).await.unwrap(); // serve dir is infallible
             let status = res.status();
@@ -72,13 +76,13 @@ async fn main() {
     tracing::info!("listening on http://{}", sock_addr);
     tracing::info!("in directory: {:#?}", std::env::current_dir().unwrap());
 
+    pyo3::prepare_freethreaded_python();
     axum::Server::bind(&sock_addr)
         .serve(app.into_make_service())
         .await
         .expect("Unable to start server");
 }
 
-#[allow(clippy::unused_async)]
 async fn hello() -> impl IntoResponse {
     let time = humantime::format_rfc3339_millis(
         std::time::SystemTime::now()
@@ -88,13 +92,34 @@ async fn hello() -> impl IntoResponse {
     format!("hello from server! (at {time})")
 }
 
-#[allow(clippy::unused_async)]
 async fn python() -> impl IntoResponse {
+    let script_path = if std::env::current_dir().unwrap().ends_with("server") {
+        "test.py"
+    } else {
+        "server/test.py"
+    };
+
     let out = std::process::Command::new("python")
-        .args(["server/test.py"])
+        .args([script_path])
         .output();
     match out {
         Ok(out) => std::str::from_utf8(&out.stdout).unwrap().to_owned(),
         Err(err) => err.to_string(),
     }
+}
+
+fn _pyo3(py: Python) -> PyResult<String> {
+    let datetime = py.import("datetime")?;
+    let datetime = datetime.getattr("datetime")?;
+
+    let time = datetime.call_method0("now")?;
+
+    Ok(format!("hello from python in RUST! (at {time})"))
+}
+
+async fn pyo3() -> impl IntoResponse {
+    Python::with_gil(|py| match _pyo3(py) {
+        Ok(res) => res,
+        Err(err) => err.to_string(),
+    })
 }
