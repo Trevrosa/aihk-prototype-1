@@ -19,14 +19,61 @@ fn switch(routes: Route) -> Html {
         Route::Home => html! {
             <div>
                 <h1>{ "Hello Frontend" }</h1>
+
+                <br/>
+                <h2>{ "One component" }</h2>
+                <Hellos/>
+                <br/>
+
+                <h2>{ "Multiple components" }</h2>
                 <HelloServer/>
                 <HelloPython/>
                 <HelloPYO3/>
+
             </div>
         },
         Route::NotFound => html! {
             <h1 style="text-align: center;">{ "404 Not Found" }</h1>
         },
+    }
+}
+
+#[function_component(Hellos)]
+fn hellos() -> Html {
+    let data = use_state(|| None);
+
+    {
+        let data = data.clone();
+        use_effect(move || {
+            if data.is_none() {
+                spawn_local(async move {
+                    let mut hellos = Vec::with_capacity(3);
+                    hellos.push(get_api("/api/hello").await);
+                    hellos.push(get_api("/api/python").await);
+                    hellos.push(get_api("/api/pyo3").await);
+
+                    data.set(Some(hellos));
+                });
+            }
+        });
+    }
+
+    let hellos: Vec<String> = if let Some(data) = &*data {
+        data.clone()
+    } else {
+        Vec::from([String::from("not found")])
+    };
+
+    html! {
+        <>
+        {
+            hellos.iter().map(|hello| html!
+                {
+                    <p>{hello}</p>
+                }
+            ).collect::<Html>()
+        }
+        </>
     }
 }
 
@@ -38,13 +85,15 @@ fn hello_pyo3() -> Html {
         use_effect(move || {
             if data.is_none() {
                 spawn_local(async move {
-                    data.set(get_api("/api/pyo3").await);
+                    data.set(Some(get_api("/api/pyo3").await));
                 });
             }
         });
     }
 
-    process_api_data(data.as_ref())
+    html! {
+        <p>{data.as_ref()}</p>
+    }
 }
 
 #[function_component(HelloPython)]
@@ -55,13 +104,15 @@ fn hello_python() -> Html {
         use_effect(move || {
             if data.is_none() {
                 spawn_local(async move {
-                    data.set(get_api("/api/python").await);
+                    data.set(Some(get_api("/api/python").await));
                 });
             }
         });
     }
 
-    process_api_data(data.as_ref())
+    html! {
+        <p>{data.as_ref()}</p>
+    }
 }
 
 #[function_component(HelloServer)]
@@ -74,13 +125,15 @@ fn hello_server() -> Html {
         use_effect(move || {
             if data.is_none() {
                 spawn_local(async move {
-                    data.set(get_api("/api/hello").await);
+                    data.set(Some(get_api("/api/hello").await));
                 });
             }
         });
     }
 
-    process_api_data(data.as_ref())
+    html! {
+        <p>{data.as_ref()}</p>
+    }
 }
 
 #[function_component(App)]
@@ -92,7 +145,7 @@ fn app() -> Html {
     }
 }
 
-async fn get_api(path: &str) -> Option<Result<String, String>> {
+async fn get_api(path: &str) -> String {
     let resp: Response = Request::get(path).send().await.unwrap();
 
     let resp: Result<String, String> = if resp.ok() {
@@ -105,26 +158,14 @@ async fn get_api(path: &str) -> Option<Result<String, String>> {
         ))
     };
 
-    Some(resp)
+    process_api_data(Some(&resp))
 }
 
-fn process_api_data(data: Option<&Result<String, String>>) -> Html {
+fn process_api_data(data: Option<&Result<String, String>>) -> String {
     match data {
-        None => {
-            html! {
-                <p>{ "not found" }</p>
-            }
-        }
-        Some(Ok(data)) => {
-            html! {
-                <p>{data}</p>
-            }
-        }
-        Some(Err(err)) => {
-            html! {
-                <p>{err}</p>
-            }
-        }
+        None => String::from("not found"),
+        Some(Ok(data)) => data.clone(),
+        Some(Err(err)) => err.clone(),
     }
 }
 

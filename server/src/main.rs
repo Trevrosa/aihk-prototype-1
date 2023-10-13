@@ -5,6 +5,7 @@ use axum::{response::IntoResponse, routing::get, Router};
 
 use clap::Parser;
 
+use std::env;
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -40,8 +41,8 @@ async fn main() {
     let opt = Opt::parse();
 
     // Setup logging & RUST_LOG from args
-    if std::env::var("RUST_LOG").is_err() {
-        std::env::set_var("RUST_LOG", format!("{},hyper=info,mio=info", opt.log_level));
+    if env::var("RUST_LOG").is_err() {
+        env::set_var("RUST_LOG", format!("{},hyper=info,mio=info", opt.log_level));
     }
     // enable console logging
     tracing_subscriber::fmt::init();
@@ -73,8 +74,8 @@ async fn main() {
         opt.port,
     ));
 
-    tracing::info!("listening on http://{}", sock_addr);
-    tracing::info!("in directory: {:#?}", std::env::current_dir().unwrap());
+    tracing::info!("listening on http://{sock_addr}");
+    tracing::info!("in directory: {:#?}", env::current_dir().unwrap());
 
     pyo3::prepare_freethreaded_python();
     axum::Server::bind(&sock_addr)
@@ -93,7 +94,7 @@ async fn hello() -> impl IntoResponse {
 }
 
 async fn python() -> impl IntoResponse {
-    let script_path = if std::env::current_dir().unwrap().ends_with("server") {
+    let script_path = if env::current_dir().unwrap().ends_with("server") {
         "test.py"
     } else {
         "server/test.py"
