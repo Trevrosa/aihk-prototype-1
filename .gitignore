@@ -1,6 +1,10 @@
+# built folders
 target/
 target-trunk/
 /dist/
+
+# temp log dir
 /.log/
+
+# file for developing
 /dev.html
-/nohup.out
