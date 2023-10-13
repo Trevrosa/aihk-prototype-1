@@ -45,6 +45,7 @@ async fn main() {
 
     let app = Router::new()
         .route("/api/hello", get(hello))
+        .route("/api/py", get(python))
         .fallback_service(get(|req: Request<Body>| async move {
             let res = ServeDir::new(&opt.static_dir).oneshot(req).await.unwrap(); // serve dir is infallible
             let status = res.status();
@@ -69,6 +70,7 @@ async fn main() {
     ));
 
     tracing::info!("listening on http://{}", sock_addr);
+    tracing::info!("in directory: {:#?}", std::env::current_dir().unwrap());
 
     axum::Server::bind(&sock_addr)
         .serve(app.into_make_service())
@@ -77,5 +79,13 @@ async fn main() {
 }
 
 async fn hello() -> impl IntoResponse {
-    "hello from server!"
+    format!("hello from server! (at {})", humantime::format_rfc3339_millis(std::time::SystemTime::now().checked_add(std::time::Duration::from_secs(60*60*8)).unwrap()))
+}
+
+async fn python() -> impl IntoResponse {
+    let out = std::process::Command::new("python").args(&["server/test.py"]).output();
+    match out {
+        Ok(out) => std::str::from_utf8(&out.stdout).unwrap().to_owned(),
+        Err(err) => err.to_string()
+    }
 }

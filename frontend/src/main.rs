@@ -1,5 +1,6 @@
 use gloo_net::http::{Request, Response};
 use wasm_bindgen_futures::spawn_local;
+
 use yew::prelude::*;
 use yew_router::prelude::*;
 
@@ -19,6 +20,7 @@ fn switch(routes: Route) -> Html {
             <div>
                 <h1>{ "Hello Frontend" }</h1>
                 <HelloServer/>
+                <HelloPython/>
             </div>
         },
         Route::NotFound => html! {
@@ -27,9 +29,26 @@ fn switch(routes: Route) -> Html {
     }
 }
 
+#[function_component(HelloPython)]
+fn hello_python() -> Html {
+    let data = use_state(|| None);
+    {
+        let data = data.clone();
+        use_effect(move || {
+            if data.is_none() {
+                spawn_local(async move {
+                    data.set(get_api("/api/py").await);
+                });
+            }
+        });
+    }
+
+    process_api_data(data.as_ref())
+}
+
 #[function_component(HelloServer)]
 fn hello_server() -> Html {
-    let data: UseStateHandle<Option<Result<String, String>>> = use_state(|| None);
+    let data = use_state(|| None);
 
     // Request `/api/hello` once
     {
