@@ -78,14 +78,23 @@ async fn main() {
         .expect("Unable to start server");
 }
 
+#[allow(clippy::unused_async)]
 async fn hello() -> impl IntoResponse {
-    format!("hello from server! (at {})", humantime::format_rfc3339_millis(std::time::SystemTime::now().checked_add(std::time::Duration::from_secs(60*60*8)).unwrap()))
+    let time = humantime::format_rfc3339_millis(
+        std::time::SystemTime::now()
+            .checked_add(std::time::Duration::from_secs(60 * 60 * 8))
+            .unwrap(),
+    );
+    format!("hello from server! (at {time})")
 }
 
+#[allow(clippy::unused_async)]
 async fn python() -> impl IntoResponse {
-    let out = std::process::Command::new("python").args(&["server/test.py"]).output();
+    let out = std::process::Command::new("python")
+        .args(["server/test.py"])
+        .output();
     match out {
         Ok(out) => std::str::from_utf8(&out.stdout).unwrap().to_owned(),
-        Err(err) => err.to_string()
+        Err(err) => err.to_string(),
     }
 }
