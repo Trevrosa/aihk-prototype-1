@@ -1,7 +1,3 @@
-# imp-number-1
-
-This is a full stack Rust web app using [axum](https://github.com/tokio-rs/axum) and [yew](https://yew.rs/).
-
 ## Usage
 
 Run the dev version (auto-reloads server & client on file change) with `./dev.sh`.

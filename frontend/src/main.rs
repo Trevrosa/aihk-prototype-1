@@ -1,8 +1,13 @@
 use gloo_net::http::{Request, Response};
+
+use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::spawn_local;
+use web_sys::{window, HtmlTextAreaElement};
 
 use yew::prelude::*;
 use yew_router::prelude::*;
+
+use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Routable, PartialEq)]
 enum Route {
@@ -16,123 +21,53 @@ enum Route {
 #[allow(clippy::needless_pass_by_value)]
 fn switch(routes: Route) -> Html {
     match routes {
-        Route::Home => html! {
-            <div>
-                <h1>{ "Hello Frontend" }</h1>
+        Route::Home => {
+            let submit: Callback<MouseEvent> = Callback::from(move |_| {
+                let texts = get_textarea("input");
+                let user = get_textarea("user");
 
-                <br/>
-                <h2>{ "One component" }</h2>
-                <Hellos/>
-                <br/>
+                log::info!("{user}: {texts}");
 
-                <h2>{ "Multiple components" }</h2>
-                <HelloServer/>
-                <HelloPython/>
-                <HelloPYO3/>
+                spawn_local(async move {
+                    let request_body: Post = Post::new(user, texts);
 
-            </div>
-        },
+                    let req = Request::post("/api/submit_post")
+                        .json(&request_body)
+                        .unwrap()
+                        .send()
+                        .await;
+
+                    if req.is_ok() {
+                        log::info!("Success");
+                    } else {
+                        log::info!("Failed");
+                    }
+                });
+            });
+
+            html! {
+                <div class="outside">
+                    <div class="main">
+                        <h1>{ "HI" }</h1>
+                        <Posts/>
+                    </div>
+                    <div class="inputing">
+                        <h2>{ "Input" }</h2>
+
+                        <p>{ "username" }</p>
+                        <textarea id="user"/>
+
+                        <p>{ "content" }</p>
+                        <textarea id="input"/>
+
+                        <button onclick={submit}>{ "Submit" }</button>
+                    </div>
+                </div>
+            }
+        }
         Route::NotFound => html! {
             <h1 style="text-align: center;">{ "404 Not Found" }</h1>
         },
-    }
-}
-
-#[function_component(Hellos)]
-fn hellos() -> Html {
-    let data = use_state(|| None);
-
-    {
-        let data = data.clone();
-        use_effect(move || {
-            if data.is_none() {
-                spawn_local(async move {
-                    let mut hellos = Vec::with_capacity(3);
-                    hellos.push(get_api("/api/hello").await);
-                    hellos.push(get_api("/api/python").await);
-                    hellos.push(get_api("/api/pyo3").await);
-
-                    data.set(Some(hellos));
-                });
-            }
-        });
-    }
-
-    let hellos: Vec<String> = if let Some(data) = &*data {
-        data.clone()
-    } else {
-        Vec::from([String::from("not found")])
-    };
-
-    html! {
-        <>
-        {
-            hellos.iter().map(|hello| html!
-                {
-                    <p>{hello}</p>
-                }
-            ).collect::<Html>()
-        }
-        </>
-    }
-}
-
-#[function_component(HelloPYO3)]
-fn hello_pyo3() -> Html {
-    let data = use_state(|| None);
-    {
-        let data = data.clone();
-        use_effect(move || {
-            if data.is_none() {
-                spawn_local(async move {
-                    data.set(Some(get_api("/api/pyo3").await));
-                });
-            }
-        });
-    }
-
-    html! {
-        <p>{data.as_ref()}</p>
-    }
-}
-
-#[function_component(HelloPython)]
-fn hello_python() -> Html {
-    let data = use_state(|| None);
-    {
-        let data = data.clone();
-        use_effect(move || {
-            if data.is_none() {
-                spawn_local(async move {
-                    data.set(Some(get_api("/api/python").await));
-                });
-            }
-        });
-    }
-
-    html! {
-        <p>{data.as_ref()}</p>
-    }
-}
-
-#[function_component(HelloServer)]
-fn hello_server() -> Html {
-    let data = use_state(|| None);
-
-    // Request `/api/hello` once
-    {
-        let data = data.clone();
-        use_effect(move || {
-            if data.is_none() {
-                spawn_local(async move {
-                    data.set(Some(get_api("/api/hello").await));
-                });
-            }
-        });
-    }
-
-    html! {
-        <p>{data.as_ref()}</p>
     }
 }
 
@@ -145,7 +80,86 @@ fn app() -> Html {
     }
 }
 
-async fn get_api(path: &str) -> String {
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+struct Post {
+    username: String,
+    content: String,
+}
+
+impl Post {
+    fn new(username: String, content: String) -> Self {
+        Self { username, content }
+    }
+}
+
+impl std::fmt::Display for Post {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} said: {}", self.username, self.content)
+    }
+}
+
+fn get_textarea(id: &str) -> String {
+    window()
+        .unwrap()
+        .document()
+        .unwrap()
+        .get_element_by_id(id)
+        .unwrap()
+        .unchecked_into::<HtmlTextAreaElement>()
+        .value()
+}
+
+#[function_component(Posts)]
+fn show_posts() -> Html {
+    let data = use_state_eq(|| None);
+
+    {
+        let data = data.clone();
+
+        use_effect(|| {
+            spawn_local(async move {
+                log::info!("got posts");
+                data.set(Some(get_api_json::<Vec<Post>>("/api/get_posts").await));
+            });
+        });
+    }
+
+    let posts: Vec<Post> = if let Some(Ok(data)) = &*data {
+        data.clone()
+    } else {
+        vec![Post::new("loading".to_string(), String::new())]
+    };
+
+    html! {
+        {
+            posts
+                .iter()
+                .map(|hello| html!
+                    {
+                        <p>{hello}</p>
+                    }
+            ).collect::<Html>()
+        }
+    }
+}
+
+async fn get_api_json<T: for<'a> Deserialize<'a>>(path: &str) -> Result<T, String> {
+    let resp: Response = Request::get(path).send().await.unwrap();
+
+    let resp: Result<T, String> = if resp.ok() {
+        resp.json::<T>().await.map_err(|err| err.to_string())
+    } else {
+        Err(format!(
+            "Error fetching data {} ({})",
+            resp.status(),
+            resp.status_text()
+        ))
+    };
+
+    resp
+}
+
+async fn _get_api(path: &str) -> String {
     let resp: Response = Request::get(path).send().await.unwrap();
 
     let resp: Result<String, String> = if resp.ok() {
@@ -158,14 +172,10 @@ async fn get_api(path: &str) -> String {
         ))
     };
 
-    process_api_data(Some(&resp))
-}
-
-fn process_api_data(data: Option<&Result<String, String>>) -> String {
-    match data {
+    match Some(resp) {
         None => String::from("not found"),
-        Some(Ok(data)) => data.clone(),
-        Some(Err(err)) => err.clone(),
+        Some(Ok(data)) => data,
+        Some(Err(err)) => err,
     }
 }
 

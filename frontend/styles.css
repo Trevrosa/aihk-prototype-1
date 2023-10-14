@@ -1,3 +1,29 @@
-div {
+textarea {
+    resize: none;
+}
+
+.main {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+}
+
+.inputing {
+    display: flex;
+    align-items: center;
+    justify-content: right;
+    flex-direction: column;
+}
+
+.outside {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: row;
+    gap: 40%;
+}
+
+.preloading {
     text-align: center;
 }

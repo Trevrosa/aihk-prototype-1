@@ -1,9 +1,17 @@
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use axum::response::Html;
-use axum::{response::IntoResponse, routing::get, Router};
+use axum::{
+    response::IntoResponse,
+    routing::{get, post},
+    Router,
+};
+use axum::{Extension, Json};
 
 use clap::Parser;
+use serde::{Deserialize, Serialize};
+use sqlx::sqlite::SqliteConnectOptions;
+use sqlx::{ConnectOptions, Connection, FromRow};
 
 use std::env;
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};
@@ -15,8 +23,6 @@ use tokio::fs;
 use tower::{ServiceBuilder, ServiceExt};
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
-
-use pyo3::prelude::*;
 
 #[allow(clippy::unused_async)]
 // Setup the command line interface with clap.
@@ -44,13 +50,25 @@ async fn main() {
     if env::var("RUST_LOG").is_err() {
         env::set_var("RUST_LOG", format!("{},hyper=info,mio=info", opt.log_level));
     }
+
     // enable console logging
     tracing_subscriber::fmt::init();
 
+    let db_path = if std::env::current_dir().unwrap().ends_with("server") {
+        "all.db"
+    } else {
+        "server/all.db"
+    };
+
+    let db_opts = SqliteConnectOptions::new()
+        .filename(db_path)
+        .create_if_missing(true);
+
     let app = Router::new()
-        .route("/api/hello", get(hello))
-        .route("/api/python", get(python))
-        .route("/api/pyo3", get(pyo3))
+        .route("/api/hi", get(test))
+        .route("/api/get_posts", get(get_sql))
+        .route("/api/submit_post", post(post_sql))
+        .layer(Extension(db_opts))
         .fallback_service(get(|req: Request<Body>| async move {
             let res = ServeDir::new(&opt.static_dir).oneshot(req).await.unwrap(); // serve dir is infallible
             let status = res.status();
@@ -74,53 +92,64 @@ async fn main() {
         opt.port,
     ));
 
+    let db_opts = SqliteConnectOptions::new()
+        .filename(db_path)
+        .create_if_missing(true);
+
+    let mut sqlite_connection = db_opts.connect().await.unwrap();
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS posts (username TEXT PRIMARY KEY, content TEXT NOT NULL)",
+    )
+    .execute(&mut sqlite_connection)
+    .await
+    .unwrap();
+    pyo3::prepare_freethreaded_python();
+    sqlite_connection.close();
+
     tracing::info!("listening on http://{sock_addr}");
     tracing::info!("in directory: {:#?}", env::current_dir().unwrap());
 
-    pyo3::prepare_freethreaded_python();
     axum::Server::bind(&sock_addr)
         .serve(app.into_make_service())
         .await
         .expect("Unable to start server");
 }
 
-async fn hello() -> impl IntoResponse {
-    let time = humantime::format_rfc3339_millis(
-        std::time::SystemTime::now()
-            .checked_add(std::time::Duration::from_secs(60 * 60 * 8))
-            .unwrap(),
-    );
-    format!("hello from server! (at {time})")
+#[derive(Debug, Deserialize, Serialize, FromRow)]
+struct Post {
+    username: String,
+    content: String,
 }
 
-async fn python() -> impl IntoResponse {
-    let script_path = if env::current_dir().unwrap().ends_with("server") {
-        "test.py"
-    } else {
-        "server/test.py"
-    };
+async fn get_sql(Extension(db_opts): Extension<SqliteConnectOptions>) -> Json<Vec<Post>> {
+    let mut sqlite_connection = db_opts.connect().await.unwrap();
+    let got = sqlx::query_as::<_, Post>("SELECT * from posts")
+        .fetch_all(&mut sqlite_connection)
+        .await
+        .unwrap();
 
-    let out = std::process::Command::new("python")
-        .args([script_path])
-        .output();
-    match out {
-        Ok(out) => std::str::from_utf8(&out.stdout).unwrap().to_owned(),
-        Err(err) => err.to_string(),
+    Json(got)
+}
+
+async fn post_sql(
+    Extension(db_opts): Extension<SqliteConnectOptions>,
+    Json(input): Json<Post>,
+) -> impl IntoResponse {
+    tracing::info!("{:?}", input);
+
+    let mut sqlite_connection = db_opts.connect().await.unwrap();
+
+    let res = sqlx::query("INSERT INTO posts (username, content) VALUES ($1, $2)")
+        .bind(input.username)
+        .bind(input.content)
+        .execute(&mut sqlite_connection)
+        .await;
+    match res {
+        Ok(_) => StatusCode::ACCEPTED,
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR,
     }
 }
 
-fn _pyo3(py: Python) -> PyResult<String> {
-    let datetime = py.import("datetime")?;
-    let datetime = datetime.getattr("datetime")?;
-
-    let time = datetime.call_method0("now")?;
-
-    Ok(format!("hello from python in RUST! (at {time})"))
-}
-
-async fn pyo3() -> impl IntoResponse {
-    Python::with_gil(|py| match _pyo3(py) {
-        Ok(res) => res,
-        Err(err) => err.to_string(),
-    })
+async fn test() -> impl IntoResponse {
+    "hi!"
 }
