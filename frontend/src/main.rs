@@ -1,9 +1,7 @@
-use frontend::Post;
+use frontend::{get_textarea, set_text, Post};
 use gloo_net::http::{Request, Response};
 
-use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::spawn_local;
-use web_sys::{window, HtmlTextAreaElement};
 
 use yew::prelude::*;
 use yew_router::prelude::*;
@@ -28,6 +26,11 @@ fn switch(routes: Route) -> Html {
                 let user = get_textarea("user");
 
                 spawn_local(async move {
+                    if user.is_empty() || texts.is_empty() {
+                        set_text("status", "cannot be empty");
+                        return;
+                    }
+
                     let request_body: Post = Post::new(user, texts);
                     log::info!(
                         "sent payload: {}",
@@ -40,10 +43,16 @@ fn switch(routes: Route) -> Html {
                         .send()
                         .await;
 
-                    if req.is_ok() {
-                        log::info!("Success");
-                    } else {
-                        log::info!("Failed");
+                    if let Ok(req) = req {
+                        let resp = req.text().await.unwrap();
+
+                        if req.ok() {
+                            log::info!("Success: {:?}", resp);
+                        } else {
+                            log::info!("Failed: {:?}", resp);
+                        }
+
+                        set_text("status", &resp);
                     }
                 });
             });
@@ -64,6 +73,7 @@ fn switch(routes: Route) -> Html {
                         <textarea id="input"/>
 
                         <button onclick={submit}>{ "Submit" }</button>
+                        <p id="status"/>
                     </div>
                 </div>
             }
@@ -83,36 +93,27 @@ fn app() -> Html {
     }
 }
 
-fn get_textarea(id: &str) -> String {
-    window()
-        .unwrap()
-        .document()
-        .unwrap()
-        .get_element_by_id(id)
-        .unwrap()
-        .unchecked_into::<HtmlTextAreaElement>()
-        .value()
-}
-
 #[function_component(Posts)]
 fn show_posts() -> Html {
-    let data = use_state_eq(|| None);
+    let data = use_state(|| Err(String::from("not found")));
 
     {
         let data = data.clone();
 
         use_effect(|| {
-            spawn_local(async move {
-                log::info!("got posts");
-                data.set(Some(get_api_json::<Vec<Post>>("/api/get_posts").await));
-            });
+            if data.is_err() {
+                spawn_local(async move {
+                    log::info!("got posts");
+                    data.set(get_api_json::<Vec<Post>>("/api/get_posts").await);
+                });
+            }
         });
     }
 
-    let posts: Vec<Post> = if let Some(Ok(data)) = &*data {
+    let posts: Vec<Post> = if let Ok(data) = &*data {
         data.clone()
     } else {
-        vec![Post::new("nobody".to_string(), "nothing".to_string())]
+        vec![Post::default()]
     };
 
     html! {
@@ -123,7 +124,7 @@ fn show_posts() -> Html {
                     {
                         <p>{hello}</p>
                     }
-            ).collect::<Html>()
+                ).collect::<Html>()
         }
     }
 }

@@ -16,12 +16,18 @@ textarea {
     flex-direction: column;
 }
 
+#status {
+    margin: 10px 0;
+    padding: 5px;
+    border: 1px solid #999;
+}
+
 .outside {
     display: flex;
     align-items: center;
     justify-content: center;
     flex-direction: row;
-    gap: 40%;
+    gap: 30%;
 }
 
 .preloading {

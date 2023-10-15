@@ -15,7 +15,7 @@ use clap::Parser;
 
 use server::{AppError, Post};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
-use sqlx::{ConnectOptions, Pool, Sqlite};
+use sqlx::{ConnectOptions, Pool, Row, Sqlite};
 
 use std::env;
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};
@@ -52,7 +52,7 @@ async fn main() -> Result<()> {
     if env::var("RUST_LOG").is_err() {
         env::set_var("RUST_LOG", format!("{},hyper=info,mio=info", opt.log_level));
     }
-    
+
     // enable console logging
     tracing_subscriber::fmt::init();
 
@@ -69,11 +69,11 @@ async fn main() -> Result<()> {
             .connect()
             .await?;
 
-        sqlx::query(
-            "CREATE TABLE IF NOT EXISTS posts (username TEXT PRIMARY KEY, content TEXT NOT NULL)",
-        )
-        .execute(&mut sqlite_connection)
-        .await?;
+        sqlx::query("CREATE TABLE IF NOT EXISTS posts (id INTEGER PRIMARY KEY, username TEXT NOT NULL, content TEXT NOT NULL)")
+            .execute(&mut sqlite_connection)
+            .await?;
+
+        tracing::info!("db,table exists");
     }
 
     let db_pool = SqlitePoolOptions::new()
@@ -82,7 +82,6 @@ async fn main() -> Result<()> {
         .await?;
 
     let app = Router::new()
-        .route("/api/hi", get(test))
         .route("/api/get_posts", get(get_sql))
         .route("/api/submit_post", post(post_sql))
         .with_state(db_pool)
@@ -136,18 +135,25 @@ async fn post_sql(
 ) -> impl IntoResponse {
     tracing::info!("recieved {:?}", input);
 
-    let res = sqlx::query("INSERT INTO posts (username, content) VALUES ($1, $2)")
+    let last = sqlx::query("SELECT id FROM posts ORDER BY id DESC LIMIT 1")
+        .fetch_one(&db_pool)
+        .await;
+
+    let last: u32 = if let Ok(last) = last {
+        last.get::<u32, usize>(0)
+    } else {
+        0
+    };
+
+    let res = sqlx::query("INSERT INTO posts (id, username, content) VALUES ($1, $2, $3)")
+        .bind(last + 1)
         .bind(input.username)
         .bind(input.content)
         .execute(&db_pool)
         .await;
 
     match res {
-        Ok(_) => StatusCode::ACCEPTED,
-        Err(_) => StatusCode::INTERNAL_SERVER_ERROR,
+        Ok(_) => (StatusCode::ACCEPTED, "OK".to_string()),
+        Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, format!("{err}")),
     }
-}
-
-async fn test() -> impl IntoResponse {
-    "hi!"
 }
