@@ -4,7 +4,7 @@ Run the dev version (auto-reloads server & client on file change) with `./dev.sh
 
 Run the pre-compiled version with `./prod.sh`.
 
-The app will start at http://localhost:8080 by default. You can modify that by changing the flags passed to the server binary:
+The app will start at http://localhost:8082 by default. You can modify that by changing the flags passed to the server binary:
 
 ```
 Usage: server [OPTIONS]
