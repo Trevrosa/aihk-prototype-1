@@ -112,7 +112,7 @@ fn show_posts() -> Html {
     let posts: Vec<Post> = if let Some(Ok(data)) = &*data {
         data.clone()
     } else {
-        vec![Post::new("loading".to_string(), String::new())]
+        vec![Post::new("nobody".to_string(), "nothing".to_string())]
     };
 
     html! {
