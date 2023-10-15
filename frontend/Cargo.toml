@@ -9,7 +9,6 @@ edition = "2021"
 # utils
 console_error_panic_hook = "0.1.7"
 gloo-net = "0.4"
-gloo-timers = "0.3.0"
 log = "0.4.17"
 
 serde = "1.0.189"

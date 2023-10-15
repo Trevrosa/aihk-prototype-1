@@ -108,7 +108,7 @@ async fn main() -> Result<()> {
         opt.port,
     ));
 
-    pyo3::prepare_freethreaded_python();
+    // pyo3::prepare_freethreaded_python();
 
     tracing::info!("listening on http://{sock_addr}");
     tracing::info!("in directory: {:#?}", env::current_dir().unwrap());
@@ -122,7 +122,7 @@ async fn main() -> Result<()> {
 }
 
 async fn get_sql(State(db_pool): State<Pool<Sqlite>>) -> Result<Json<Vec<Post>>, AppError> {
-    let got = sqlx::query_as::<_, Post>("SELECT * from posts")
+    let got = sqlx::query_as::<_, Post>("SELECT username, content from posts")
         .fetch_all(&db_pool)
         .await?;
 

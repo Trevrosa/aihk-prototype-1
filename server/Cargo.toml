@@ -12,7 +12,7 @@ clap = { version = "4.0.32", features = ["derive"] }
 serde = "1.0.189"
 
 # specific crates
-pyo3 = "0.20.0"
+# pyo3 = "0.20.0"
 sqlx = { version = "0.7.2", features = ["runtime-tokio", "macros", "sqlite"] }
 
 # runtimes
