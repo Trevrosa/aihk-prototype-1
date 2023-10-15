@@ -1,17 +1,21 @@
 use axum::body::Body;
+use axum::extract::State;
 use axum::http::{Request, StatusCode};
 use axum::response::Html;
+use axum::Json;
 use axum::{
     response::IntoResponse,
     routing::{get, post},
     Router,
 };
-use axum::{Extension, Json};
+
+use anyhow::Result;
 
 use clap::Parser;
-use serde::{Deserialize, Serialize};
-use sqlx::sqlite::SqliteConnectOptions;
-use sqlx::{ConnectOptions, Connection, FromRow};
+
+use server::{AppError, Post};
+use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
+use sqlx::{ConnectOptions, Pool, Sqlite};
 
 use std::env;
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};
@@ -19,15 +23,13 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use tokio::fs;
-
 use tower::{ServiceBuilder, ServiceExt};
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
 
 #[allow(clippy::unused_async)]
-// Setup the command line interface with clap.
 #[derive(Parser, Debug)]
-#[clap(name = "server", about = "Server")]
+#[clap(name = "server", about = "Set server opts")]
 struct Opt {
     /// set the log level
     #[clap(short = 'l', long = "log", default_value = "debug")]
@@ -43,32 +45,47 @@ struct Opt {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<()> {
     let opt = Opt::parse();
 
     // Setup logging & RUST_LOG from args
     if env::var("RUST_LOG").is_err() {
         env::set_var("RUST_LOG", format!("{},hyper=info,mio=info", opt.log_level));
     }
-
+    
     // enable console logging
     tracing_subscriber::fmt::init();
 
-    let db_path = if std::env::current_dir().unwrap().ends_with("server") {
-        "all.db"
+    let db_path = if std::env::current_dir()?.ends_with("server") {
+        "sqlite://all.db"
     } else {
-        "server/all.db"
+        "sqlite://server/all.db"
     };
 
-    let db_opts = SqliteConnectOptions::new()
-        .filename(db_path)
-        .create_if_missing(true);
+    {
+        let mut sqlite_connection = SqliteConnectOptions::new()
+            .filename(db_path.split("//").nth(1).unwrap())
+            .create_if_missing(true)
+            .connect()
+            .await?;
+
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS posts (username TEXT PRIMARY KEY, content TEXT NOT NULL)",
+        )
+        .execute(&mut sqlite_connection)
+        .await?;
+    }
+
+    let db_pool = SqlitePoolOptions::new()
+        .max_connections(5)
+        .connect(db_path)
+        .await?;
 
     let app = Router::new()
         .route("/api/hi", get(test))
         .route("/api/get_posts", get(get_sql))
         .route("/api/submit_post", post(post_sql))
-        .layer(Extension(db_opts))
+        .with_state(db_pool)
         .fallback_service(get(|req: Request<Body>| async move {
             let res = ServeDir::new(&opt.static_dir).oneshot(req).await.unwrap(); // serve dir is infallible
             let status = res.status();
@@ -92,19 +109,7 @@ async fn main() {
         opt.port,
     ));
 
-    let db_opts = SqliteConnectOptions::new()
-        .filename(db_path)
-        .create_if_missing(true);
-
-    let mut sqlite_connection = db_opts.connect().await.unwrap();
-    sqlx::query(
-        "CREATE TABLE IF NOT EXISTS posts (username TEXT PRIMARY KEY, content TEXT NOT NULL)",
-    )
-    .execute(&mut sqlite_connection)
-    .await
-    .unwrap();
     pyo3::prepare_freethreaded_python();
-    sqlite_connection.close();
 
     tracing::info!("listening on http://{sock_addr}");
     tracing::info!("in directory: {:#?}", env::current_dir().unwrap());
@@ -113,37 +118,30 @@ async fn main() {
         .serve(app.into_make_service())
         .await
         .expect("Unable to start server");
+
+    Ok(())
 }
 
-#[derive(Debug, Deserialize, Serialize, FromRow)]
-struct Post {
-    username: String,
-    content: String,
-}
-
-async fn get_sql(Extension(db_opts): Extension<SqliteConnectOptions>) -> Json<Vec<Post>> {
-    let mut sqlite_connection = db_opts.connect().await.unwrap();
+async fn get_sql(State(db_pool): State<Pool<Sqlite>>) -> Result<Json<Vec<Post>>, AppError> {
     let got = sqlx::query_as::<_, Post>("SELECT * from posts")
-        .fetch_all(&mut sqlite_connection)
-        .await
-        .unwrap();
+        .fetch_all(&db_pool)
+        .await?;
 
-    Json(got)
+    Ok(Json(got))
 }
 
 async fn post_sql(
-    Extension(db_opts): Extension<SqliteConnectOptions>,
+    State(db_pool): State<Pool<Sqlite>>,
     Json(input): Json<Post>,
 ) -> impl IntoResponse {
-    tracing::info!("{:?}", input);
-
-    let mut sqlite_connection = db_opts.connect().await.unwrap();
+    tracing::info!("recieved {:?}", input);
 
     let res = sqlx::query("INSERT INTO posts (username, content) VALUES ($1, $2)")
         .bind(input.username)
         .bind(input.content)
-        .execute(&mut sqlite_connection)
+        .execute(&db_pool)
         .await;
+
     match res {
         Ok(_) => StatusCode::ACCEPTED,
         Err(_) => StatusCode::INTERNAL_SERVER_ERROR,

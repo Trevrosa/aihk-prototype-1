@@ -1,3 +1,4 @@
+use frontend::Post;
 use gloo_net::http::{Request, Response};
 
 use wasm_bindgen::JsCast;
@@ -7,7 +8,7 @@ use web_sys::{window, HtmlTextAreaElement};
 use yew::prelude::*;
 use yew_router::prelude::*;
 
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 #[derive(Clone, Routable, PartialEq)]
 enum Route {
@@ -26,10 +27,12 @@ fn switch(routes: Route) -> Html {
                 let texts = get_textarea("input");
                 let user = get_textarea("user");
 
-                log::info!("{user}: {texts}");
-
                 spawn_local(async move {
                     let request_body: Post = Post::new(user, texts);
+                    log::info!(
+                        "sent payload: {}",
+                        serde_json::to_string(&request_body).unwrap()
+                    );
 
                     let req = Request::post("/api/submit_post")
                         .json(&request_body)
@@ -77,24 +80,6 @@ fn app() -> Html {
         <BrowserRouter>
             <Switch<Route> render={switch} />
         </BrowserRouter>
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
-struct Post {
-    username: String,
-    content: String,
-}
-
-impl Post {
-    fn new(username: String, content: String) -> Self {
-        Self { username, content }
-    }
-}
-
-impl std::fmt::Display for Post {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} said: {}", self.username, self.content)
     }
 }
 

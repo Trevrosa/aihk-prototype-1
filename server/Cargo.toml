@@ -9,9 +9,6 @@ edition = "2021"
 # util crates
 anyhow = "1.0.75"
 clap = { version = "4.0.32", features = ["derive"] }
-humantime = "2.1.0"
-
-serde_json = "1.0.107"
 serde = "1.0.189"
 
 # specific crates
@@ -28,4 +25,4 @@ tower-http = { version = "0.4", features = ["full"] }
 
 # logging
 tracing = "0.1.37"
-tracing-subscriber = "0.3.16"
+tracing-subscriber = { version = "0.3.16", features = ["time"] }
