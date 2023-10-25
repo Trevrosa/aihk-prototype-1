@@ -61,7 +61,9 @@ fn switch(routes: Route) -> Html {
                 <div class="outside">
                     <div class="main">
                         <h1>{ "HI" }</h1>
-                        <Posts/>
+                        <div class="posts">
+                            <Posts/>
+                        </div>
                     </div>
                     <div class="inputing">
                         <h2>{ "Input" }</h2>
@@ -103,8 +105,8 @@ fn show_posts() -> Html {
         use_effect(|| {
             if data.is_err() {
                 spawn_local(async move {
-                    log::info!("got posts");
                     data.set(get_api_json::<Vec<Post>>("/api/get_posts").await);
+                    log::info!("got posts {:#?}", &data);
                 });
             }
         });
@@ -147,9 +149,7 @@ fn show_posts() -> Html {
         .collect::<Html>();
 
     html! {
-        <div class="posts">
-            { posts }
-        </div>
+        { posts }
     }
 }
 
