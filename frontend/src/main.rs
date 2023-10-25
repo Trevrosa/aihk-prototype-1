@@ -3,7 +3,7 @@ use gloo_net::http::{Request, Response};
 
 use wasm_bindgen_futures::spawn_local;
 
-use yew::prelude::*;
+use yew::{prelude::*, virtual_dom::VNode};
 use yew_router::prelude::*;
 
 use serde::Deserialize;
@@ -116,16 +116,40 @@ fn show_posts() -> Html {
         vec![Post::default()]
     };
 
+    let posts: VNode = posts
+        .iter()
+        .map(|post| {
+            let comments = post.comments.as_ref();
+
+            let comments = match comments {
+                Some(comments) => comments
+                    .iter()
+                    .map(|comment| {
+                        html! {
+                            <div>{ format!("{}: {}", &comment.username, &comment.content) }</div>
+                        }
+                    })
+                    .collect::<Html>(),
+                None => html! {},
+            };
+
+            html! {
+                <div>
+                    <p class="username">{ format!("{} said:", &post.username) }</p>
+                    <p class="content">{ &post.content }</p>
+
+                    <div class="comments">
+                        { comments }
+                    </div>
+                </div>
+            }
+        })
+        .collect::<Html>();
+
     html! {
-        {
-            posts
-                .iter()
-                .map(|hello| html!
-                    {
-                        <p>{hello}</p>
-                    }
-                ).collect::<Html>()
-        }
+        <div class="posts">
+            { posts }
+        </div>
     }
 }
 

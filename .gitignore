@@ -7,5 +7,6 @@ server/all.db
 # temp log dir
 /.log/
 
-# file for developing
+# development
 /dev.html
+/venv

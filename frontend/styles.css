@@ -30,6 +30,27 @@ textarea {
     gap: 30%;
 }
 
-.preloading {
-    text-align: center;
+.posts {
+    margin-bottom: 20px;
+}
+
+.posts div {
+    padding: 10px;
+    background-color: #f2f2f2;
+    margin-bottom: 10px; /* Added margin-bottom for the gap */
+}
+
+.username {
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.content {
+    margin-bottom: 10px;
+}
+
+.comments {
+    font-style: italic;
+    color: #888;
+    margin-bottom: 5px;
 }

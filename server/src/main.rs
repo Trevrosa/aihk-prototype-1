@@ -9,11 +9,11 @@ use axum::{
     Router,
 };
 
-use anyhow::Result;
-
 use clap::Parser;
+use pyo3::prelude::*;
 
-use server::{AppError, Post};
+use pyo3::types::{PyDict, PyList};
+use server::{Comment, DBComment, DBPost, Post, Result};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::{ConnectOptions, Pool, Row, Sqlite};
 
@@ -45,7 +45,7 @@ struct Opt {
 }
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> anyhow::Result<()> {
     let opt = Opt::parse();
 
     // Setup logging & RUST_LOG from args
@@ -73,13 +73,19 @@ async fn main() -> Result<()> {
             .execute(&mut sqlite_connection)
             .await?;
 
-        tracing::info!("db,table exists");
+        sqlx::query("CREATE TABLE IF NOT EXISTS comments (id INTEGER PRIMARY KEY, post_id INTEGER NOT NULL, username TEXT NOT NULL, content TEXT NOT NULL)")
+            .execute(&mut sqlite_connection)
+            .await?;
+
+        tracing::debug!("db,table exists");
     }
 
     let db_pool = SqlitePoolOptions::new()
         .max_connections(5)
         .connect(db_path)
         .await?;
+
+    tracing::debug!("db pool ready");
 
     let app = Router::new()
         .route("/api/get_posts", get(get_sql))
@@ -108,49 +114,123 @@ async fn main() -> Result<()> {
         opt.port,
     ));
 
-    // pyo3::prepare_freethreaded_python();
+    pyo3::prepare_freethreaded_python();
+    tracing::debug!("python ready");
 
     tracing::info!("listening on http://{sock_addr}");
-    tracing::info!("in directory: {:#?}", env::current_dir().unwrap());
+    tracing::info!("in directory: {:#?}", env::current_dir()?);
 
     axum::Server::bind(&sock_addr)
         .serve(app.into_make_service())
-        .await
-        .expect("Unable to start server");
+        .await?;
 
     Ok(())
 }
 
-async fn get_sql(State(db_pool): State<Pool<Sqlite>>) -> Result<Json<Vec<Post>>, AppError> {
-    let got = sqlx::query_as::<_, Post>("SELECT username, content from posts")
+fn create_message<'a>(py: Python<'a>, content: &'a str) -> &'a PyDict {
+    let message = PyDict::new(py);
+    message.set_item("role", "user").unwrap();
+    message.set_item("content", content).unwrap();
+
+    message
+}
+
+fn get_advice(input: &str) -> String {
+    Python::with_gil(|py| {
+        let chat: &PyAny = py.import("g4f").unwrap().getattr("ChatCompletion").unwrap();
+
+        let prompt: String = format!(
+            r#"Depending on this message "{input}", what advice would you give this person? Keep it concise. Only respond with the advice."#
+        );
+
+        let prompt: &PyDict = create_message(py, &prompt);
+        let messages: &PyList = PyList::new(py, vec![prompt]);
+
+        let build_args: &PyDict = PyDict::new(py);
+        build_args.set_item("messages", messages).unwrap();
+
+        match chat.call_method("create", ("gpt-3.5-turbo",), Some(build_args)) {
+            Ok(res) => res.to_string(),
+            Err(err) => format!(
+                "Error: {}\nTrace: {}",
+                err.value(py),
+                err.traceback(py).unwrap()
+            ),
+        }
+    })
+}
+
+async fn get_sql(State(db_pool): State<Pool<Sqlite>>) -> Result<Json<Vec<Post>>> {
+    let db_posts: Vec<DBPost> = sqlx::query_as::<_, DBPost>("SELECT * from posts")
         .fetch_all(&db_pool)
         .await?;
+    let db_comments: Vec<DBComment> =
+        sqlx::query_as::<_, DBComment>("SELECT post_id, username, content from comments")
+            .fetch_all(&db_pool)
+            .await?;
 
-    Ok(Json(got))
+    let mut posts: Vec<Post> = Vec::with_capacity(db_posts.len());
+
+    for db_post in db_posts {
+        let comments = db_comments
+            .iter()
+            .filter(|c| c.post_id == db_post.id)
+            .map(Comment::from_db)
+            .collect::<Vec<Comment>>();
+
+        let comments = if comments.is_empty() {
+            None
+        } else {
+            Some(comments)
+        };
+
+        posts.push(Post::from_db(db_post, comments));
+    }
+
+    tracing::debug!("got: {:#?}", posts);
+
+    Ok(Json(posts))
 }
 
 async fn post_sql(
     State(db_pool): State<Pool<Sqlite>>,
     Json(input): Json<Post>,
 ) -> impl IntoResponse {
-    tracing::info!("recieved {:?}", input);
+    tracing::debug!("recieved {:?}", input);
 
-    let last = sqlx::query("SELECT id FROM posts ORDER BY id DESC LIMIT 1")
+    let last_post_id: u32 = sqlx::query("SELECT id FROM posts ORDER BY id DESC LIMIT 1")
         .fetch_one(&db_pool)
-        .await;
-
-    let last: u32 = if let Ok(last) = last {
-        last.get::<u32, usize>(0)
-    } else {
-        0
-    };
+        .await
+        .map_or(0, |row| row.get::<u32, usize>(0));
 
     let res = sqlx::query("INSERT INTO posts (id, username, content) VALUES ($1, $2, $3)")
-        .bind(last + 1)
-        .bind(input.username)
-        .bind(input.content)
+        .bind(last_post_id + 1)
+        .bind(&input.username)
+        .bind(&input.content)
         .execute(&db_pool)
         .await;
+
+    tokio::spawn(async move {
+        let response: String = get_advice(&input.content);
+
+        let last_comment_id: u32 = sqlx::query("SELECT id FROM comments ORDER BY id DESC LIMIT 1")
+            .fetch_one(&db_pool)
+            .await
+            .map_or(0, |row| row.get::<u32, usize>(0));
+
+        sqlx::query(
+            "INSERT INTO comments (id, post_id, username, content) VALUES ($1, $2, $3, $4)",
+        )
+        .bind(last_comment_id + 1)
+        .bind(last_post_id + 1)
+        .bind("AI")
+        .bind(response)
+        .execute(&db_pool)
+        .await
+        .unwrap();
+
+        tracing::info!("{:?}: ai done", input);
+    });
 
     match res {
         Ok(_) => (StatusCode::ACCEPTED, "OK".to_string()),

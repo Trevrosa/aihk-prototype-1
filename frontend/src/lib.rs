@@ -6,12 +6,30 @@ use web_sys::{window, Document, HtmlTextAreaElement};
 pub struct Post {
     pub username: String,
     pub content: String,
+    pub comments: Option<Vec<Comment>>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+pub struct Comment {
+    pub username: String,
+    pub content: String,
+}
+
+impl Comment {
+    #[must_use]
+    pub fn new(username: String, content: String) -> Self {
+        Self { username, content }
+    }
 }
 
 impl Post {
     #[must_use]
     pub fn new(username: String, content: String) -> Self {
-        Self { username, content }
+        Self {
+            username,
+            content,
+            comments: None,
+        }
     }
 }
 
@@ -19,7 +37,8 @@ impl std::default::Default for Post {
     fn default() -> Self {
         Post {
             username: "nobody".to_string(),
-            content: "nothing".to_string(),
+            content: "anything".to_string(),
+            comments: None,
         }
     }
 }
