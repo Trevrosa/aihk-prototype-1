@@ -105,8 +105,10 @@ fn show_posts() -> Html {
         use_effect(|| {
             if data.is_err() {
                 spawn_local(async move {
-                    data.set(get_api_json::<Vec<Post>>("/api/get_posts").await);
-                    log::info!("got posts {:#?}", &data);
+                    let posts = get_api_json::<Vec<Post>>("/api/get_posts").await;
+                    log::info!("got posts {:#?}", &posts);
+                    
+                    data.set(posts);
                 });
             }
         });
