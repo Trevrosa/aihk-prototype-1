@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 serde = "1.0.189"
+chrono = "0.4.31"

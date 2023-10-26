@@ -10,7 +10,7 @@ use sqlx::Pool;
 use sqlx::Sqlite;
 
 use common::Post;
-use server::{get_last_id, store_new_post, store_comment, DBComment};
+use server::{get_last_id, store_comment, store_new_post, DBComment};
 
 fn create_message<'a>(py: Python<'a>, content: &'a str) -> &'a PyDict {
     let message = PyDict::new(py);
@@ -63,7 +63,8 @@ pub async fn route(
 
     let res = store_new_post(&input, new_post_id, &db_pool).await;
 
-    let loading: DBComment = DBComment::new(new_comment_id, new_post_id, "AI", "Loading, please wait!");
+    let loading: DBComment =
+        DBComment::new(new_comment_id, new_post_id, "AI", "Loading, please wait!");
     store_comment(&loading, &db_pool).await.unwrap();
 
     tokio::spawn(async move {
@@ -80,7 +81,7 @@ pub async fn route(
     });
 
     match res {
-        Ok(_) => (StatusCode::ACCEPTED, "OK".to_string()),
+        Ok(_) => (StatusCode::ACCEPTED, "OK, reload".to_string()),
         Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, format!("{err}")),
     }
 }

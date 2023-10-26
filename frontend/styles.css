@@ -6,11 +6,13 @@ body {
     align-items: center; /* Center vertically */
     height: 100vh;
 }
+
 .container {
     display: flex;
     width: 100%;
     max-width: 1000px; /* Optional: Adjust the maximum width of the container */
 }
+
 .main {
     flex: 1;
     overflow-y: auto; /* Enable scrolling */
@@ -20,9 +22,11 @@ body {
     align-items: center; /* Center content horizontally */
     height: 100vh; /* Set a fixed height */
 }
+
 .main::-webkit-scrollbar {
     width: 0; /* Hide the scrollbar */
 }
+
 .inputing {
     flex: 1;
     overflow-y: auto;
@@ -32,6 +36,7 @@ body {
     align-items: center; /* Center content horizontally */
     height: 100vh; /* Set a fixed height */
 }
+
 .inputing::-webkit-scrollbar {
     width: 0; /* Hide the scrollbar */
 }
@@ -54,23 +59,36 @@ textarea {
     gap: 30%;
 }
 
-.posts {
-    margin-bottom: 20px;
+.post {
+    border: 1px solid #999;
+    margin-bottom: 10px;
 }
 
 .posts div {
     padding: 10px;
     background-color: #f2f2f2;
-    margin-bottom: 10px; /* Added margin-bottom for the gap */
+}
+
+.post-header {
+    display: flex; /* Add display: flex to create a flex container */
+    flex-direction: row; /* Set flex-direction to row */
+    align-items: baseline; /* Align items to the baseline */
 }
 
 .username {
     font-weight: bold;
-    margin-bottom: 5px;
+    margin: 5px;
+}
+
+.timestamp {
+    margin-left: auto; /* Move to the right side */
+    font-style: italic; /* Add italic style for timestamp */
+    color: #888; /* Add color for timestamp */
+    white-space: nowrap; /* Prevent line break */
 }
 
 .content {
-    margin-bottom: 10px;
+    padding: 10px;
 }
 
 .comments {

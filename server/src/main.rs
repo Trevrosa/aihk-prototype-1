@@ -68,11 +68,11 @@ async fn main() -> anyhow::Result<()> {
             .connect()
             .await?;
 
-        sqlx::query("CREATE TABLE IF NOT EXISTS posts (id INTEGER PRIMARY KEY, username TEXT NOT NULL, content TEXT NOT NULL)")
+        sqlx::query("CREATE TABLE IF NOT EXISTS posts (id INTEGER PRIMARY KEY, username TEXT NOT NULL, content TEXT NOT NULL, timestamp INTEGER NOT NULL)")
             .execute(&mut sqlite_connection)
             .await?;
 
-        sqlx::query("CREATE TABLE IF NOT EXISTS comments (id INTEGER PRIMARY KEY, post_id INTEGER NOT NULL, username TEXT NOT NULL, content TEXT NOT NULL)")
+        sqlx::query("CREATE TABLE IF NOT EXISTS comments (id INTEGER PRIMARY KEY, post_id INTEGER NOT NULL, username TEXT NOT NULL, content TEXT NOT NULL, timestamp INTEGER NOT NULL)")
             .execute(&mut sqlite_connection)
             .await?;
 

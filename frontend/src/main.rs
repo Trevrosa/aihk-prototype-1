@@ -1,3 +1,4 @@
+use chrono::{DateTime, Local};
 use frontend::{get_textarea, set_text};
 use gloo_net::http::{Request, Response};
 
@@ -23,7 +24,7 @@ enum Route {
 fn switch(routes: Route) -> Html {
     match routes {
         Route::Home => {
-            let submit: Callback<MouseEvent> = Callback::from(move |_| {
+            let submit_post: Callback<MouseEvent> = Callback::from(move |_| {
                 let texts: String = get_textarea("input");
                 let user: String = get_textarea("user");
 
@@ -76,7 +77,7 @@ fn switch(routes: Route) -> Html {
                         <p>{ "content" }</p>
                         <textarea id="input"/>
 
-                        <button onclick={submit}>{ "Submit" }</button>
+                        <button onclick={submit_post}>{ "Submit" }</button>
                         <p id="status"/>
                     </div>
                 </div>
@@ -99,7 +100,8 @@ fn app() -> Html {
 
 #[function_component(Posts)]
 fn show_posts() -> Html {
-    let data = use_state(|| Err(String::from("not found")));
+    let data: UseStateHandle<Result<Vec<Post>, String>> =
+        use_state(|| Err(String::from("not found")));
 
     {
         let data = data.clone();
@@ -109,7 +111,7 @@ fn show_posts() -> Html {
                 spawn_local(async move {
                     let posts = get_api_json::<Vec<Post>>("/api/get_posts").await;
 
-                    log::info!("got {} posts", posts.as_ref().map_or(0, |p| p.len()));
+                    log::info!("got {} posts", posts.as_ref().map_or(0, std::vec::Vec::len));
                     data.set(posts);
                 });
             }
@@ -133,7 +135,7 @@ fn show_posts() -> Html {
                     .map(|comment| {
                         html! {
                             <div id={ comment.id.map_or("none".to_string(), |id| id.to_string()) }>
-                                { 
+                                {
                                     format!("{}: {}", &comment.username, &comment.content)
                                 }
                             </div>
@@ -143,14 +145,19 @@ fn show_posts() -> Html {
                 None => html! {},
             };
 
-            html! {
-                <div id={ post.id.map_or("none".to_string(), |id| id.to_string()) }>
-                    <p class="username">{ format!("{} said:", &post.username) }</p>
-                    <p class="content">{ &post.content }</p>
+            let timestamp: String =
+                DateTime::<Local>::from(DateTime::from_timestamp(post.timestamp, 0).unwrap())
+                    .format("%d/%m/%Y %H:%M")
+                    .to_string();
 
-                    <div class="comments">
-                        { comments }
+            html! {
+                <div class="post" id={ post.id.map_or("none".to_string(), |id| id.to_string()) }>
+                    <div class="post-header">
+                        <p class="username">{ format!("{} said:", &post.username) }</p>
+                        <p class="timestamp">{ timestamp }</p>
                     </div>
+                    <p class="content">{ &post.content }</p>
+                    <div class="comments">{ comments }</div>
                 </div>
             }
         })

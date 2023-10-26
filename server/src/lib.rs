@@ -1,36 +1,58 @@
+use chrono::Utc;
+
 use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
 
 use common::{Comment, Post};
-use sqlx::{FromRow, Pool, Sqlite, Row, sqlite::SqliteQueryResult};
+use sqlx::{sqlite::SqliteQueryResult, FromRow, Pool, Row, Sqlite};
 
-pub async fn store_new_post(post: &Post, post_id: u32, db_pool: &Pool<Sqlite>) -> std::result::Result<SqliteQueryResult, sqlx::error::Error> {
-    sqlx::query("INSERT INTO posts (id, username, content) VALUES ($1, $2, $3)")
+/// # Errors
+/// See [`sqlx::error::Error`]
+pub async fn store_new_post(
+    post: &Post,
+    post_id: u32,
+    db_pool: &Pool<Sqlite>,
+) -> std::result::Result<SqliteQueryResult, sqlx::error::Error> {
+    sqlx::query("INSERT INTO posts (id, username, content, timestamp) VALUES ($1, $2, $3, $4)")
         .bind(post_id)
         .bind(&post.username)
         .bind(&post.content)
+        .bind(post.timestamp)
         .execute(db_pool)
         .await
 }
 
-pub async fn store_new_comment(comment: &Comment, comment_id: u32, db_pool: &Pool<Sqlite>) -> std::result::Result<SqliteQueryResult, sqlx::error::Error> {
-    sqlx::query("INSERT INTO comments (id, post_id, username, content) VALUES ($1, $2, $3, $4)")
+/// # Errors
+/// See [`sqlx::error::Error`]
+pub async fn store_new_comment(
+    comment: &Comment,
+    comment_id: u32,
+    db_pool: &Pool<Sqlite>,
+) -> std::result::Result<SqliteQueryResult, sqlx::error::Error> {
+    sqlx::query("INSERT INTO comments (id, post_id, username, content, timestamp) VALUES ($1, $2, $3, $4, $5)")
         .bind(comment_id)
         .bind(comment.post_id)
         .bind(&comment.username)
         .bind(&comment.content)
+        .bind(comment.timestamp)
         .execute(db_pool)
         .await
 }
 
-pub async fn store_comment(comment: &DBComment, db_pool: &Pool<Sqlite>) -> std::result::Result<SqliteQueryResult, sqlx::error::Error> {
-    sqlx::query("INSERT INTO comments (id, post_id, username, content) VALUES ($1, $2, $3, $4)")
+/// # Errors
+/// See [`sqlx::error::Error`]
+pub async fn store_comment(
+    comment: &DBComment,
+    db_pool: &Pool<Sqlite>,
+) -> std::result::Result<SqliteQueryResult, sqlx::error::Error> {
+    sqlx::query("INSERT INTO comments (id, post_id, username, content, timestamp) VALUES ($1, $2, $3, $4, $5)")
         .bind(comment.id)
         .bind(comment.post_id)
         .bind(&comment.username)
         .bind(&comment.content)
+        .bind(comment.timestamp)
         .execute(db_pool)
         .await
 }
@@ -56,6 +78,7 @@ pub struct DBPost {
 
     pub username: String,
     pub content: String,
+    pub timestamp: i64,
 }
 
 /// `DBComment`s are individual comments with an `id` and `post_id`.
@@ -68,6 +91,7 @@ pub struct DBComment {
 
     pub username: String,
     pub content: String,
+    pub timestamp: i64,
 }
 
 impl DBComment {
@@ -78,6 +102,7 @@ impl DBComment {
             post_id,
             username: username.to_string(),
             content: content.to_string(),
+            timestamp: Utc::now().timestamp(),
         }
     }
 }
@@ -94,6 +119,7 @@ impl FromDBPost for Post {
 
             username: post.username,
             content: post.content,
+            timestamp: post.timestamp,
 
             comments,
         }
@@ -113,6 +139,7 @@ impl FromDBComment for Comment {
 
             username: comment.username.clone(),
             content: comment.content.clone(),
+            timestamp: comment.timestamp,
         }
     }
 }

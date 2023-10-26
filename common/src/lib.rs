@@ -1,3 +1,4 @@
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
 /// `Post`s are sent and recieved by both `frontend` and `server`.
@@ -11,6 +12,7 @@ pub struct Post {
 
     pub username: String,
     pub content: String,
+    pub timestamp: i64,
 
     /// Posts can have no comments.
     pub comments: Option<Vec<Comment>>,
@@ -30,16 +32,18 @@ pub struct Comment {
 
     pub username: String,
     pub content: String,
+    pub timestamp: i64,
 }
 
 impl Post {
     #[must_use]
     pub fn new(username: String, content: String) -> Self {
         Self {
+            id: None,
             username,
             content,
+            timestamp: Utc::now().timestamp(),
             comments: None,
-            id: None,
         }
     }
 }
@@ -47,10 +51,11 @@ impl Post {
 impl Default for Post {
     fn default() -> Self {
         Self {
+            id: None,
             username: "nobody".to_string(),
             content: "anything".to_string(),
+            timestamp: 0,
             comments: None,
-            id: None,
         }
     }
 }
