@@ -1,19 +1,43 @@
+body {
+    margin: 0;
+    padding: 0;
+    display: flex;
+    justify-content: center; /* Center horizontally */
+    align-items: center; /* Center vertically */
+    height: 100vh;
+}
+.container {
+    display: flex;
+    width: 100%;
+    max-width: 1000px; /* Optional: Adjust the maximum width of the container */
+}
+.main {
+    flex: 1;
+    overflow-y: auto; /* Enable scrolling */
+    display: flex;
+    flex-direction: column; /* Items on separate lines */
+    justify-content: flex-start; /* Align items to the top */
+    align-items: center; /* Center content horizontally */
+    height: 100vh; /* Set a fixed height */
+}
+.main::-webkit-scrollbar {
+    width: 0; /* Hide the scrollbar */
+}
+.inputing {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column; /* Items on separate lines */
+    justify-content: center; /* Center content vertically */
+    align-items: center; /* Center content horizontally */
+    height: 100vh; /* Set a fixed height */
+}
+.inputing::-webkit-scrollbar {
+    width: 0; /* Hide the scrollbar */
+}
+
 textarea {
     resize: none;
-}
-
-.main {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-direction: column;
-}
-
-.inputing {
-    display: flex;
-    align-items: center;
-    justify-content: right;
-    flex-direction: column;
 }
 
 #status {

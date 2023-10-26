@@ -1,4 +1,4 @@
-use frontend::{get_textarea, set_text, Post};
+use frontend::{get_textarea, set_text};
 use gloo_net::http::{Request, Response};
 
 use wasm_bindgen_futures::spawn_local;
@@ -7,6 +7,8 @@ use yew::{prelude::*, virtual_dom::VNode};
 use yew_router::prelude::*;
 
 use serde::Deserialize;
+
+use common::Post;
 
 #[derive(Clone, Routable, PartialEq)]
 enum Route {
@@ -22,8 +24,8 @@ fn switch(routes: Route) -> Html {
     match routes {
         Route::Home => {
             let submit: Callback<MouseEvent> = Callback::from(move |_| {
-                let texts = get_textarea("input");
-                let user = get_textarea("user");
+                let texts: String = get_textarea("input");
+                let user: String = get_textarea("user");
 
                 spawn_local(async move {
                     if user.is_empty() || texts.is_empty() {
@@ -58,9 +60,9 @@ fn switch(routes: Route) -> Html {
             });
 
             html! {
-                <div class="outside">
+                <div class="container">
                     <div class="main">
-                        <h1>{ "HI" }</h1>
+                        <h1>{ "Posts" }</h1>
                         <div class="posts">
                             <Posts/>
                         </div>
@@ -106,8 +108,8 @@ fn show_posts() -> Html {
             if data.is_err() {
                 spawn_local(async move {
                     let posts = get_api_json::<Vec<Post>>("/api/get_posts").await;
-                    log::info!("got posts {:#?}", &posts);
-                    
+
+                    log::info!("got {} posts", posts.as_ref().map_or(0, |p| p.len()));
                     data.set(posts);
                 });
             }
@@ -130,7 +132,11 @@ fn show_posts() -> Html {
                     .iter()
                     .map(|comment| {
                         html! {
-                            <div>{ format!("{}: {}", &comment.username, &comment.content) }</div>
+                            <div id={ comment.id.map_or("none".to_string(), |id| id.to_string()) }>
+                                { 
+                                    format!("{}: {}", &comment.username, &comment.content)
+                                }
+                            </div>
                         }
                     })
                     .collect::<Html>(),
@@ -138,7 +144,7 @@ fn show_posts() -> Html {
             };
 
             html! {
-                <div>
+                <div id={ post.id.map_or("none".to_string(), |id| id.to_string()) }>
                     <p class="username">{ format!("{} said:", &post.username) }</p>
                     <p class="content">{ &post.content }</p>
 

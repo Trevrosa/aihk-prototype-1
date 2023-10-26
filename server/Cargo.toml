@@ -10,6 +10,7 @@ edition = "2021"
 anyhow = "1.0.75"
 clap = { version = "4.0.32", features = ["derive"] }
 serde = "1.0.189"
+common = { path = "../common" }
 
 # specific crates
 pyo3 = "0.20.0"
