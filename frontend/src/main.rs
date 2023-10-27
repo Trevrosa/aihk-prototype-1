@@ -40,7 +40,10 @@ fn switch(routes: Route) -> Html {
                         serde_json::to_string(&request_body).unwrap()
                     );
 
+                    let api_key: String = format!("Bearer {}", common::API_KEY);
+
                     let req = Request::post("/api/submit_post")
+                        .header("Authorization", &api_key)
                         .json(&request_body)
                         .unwrap()
                         .send()
@@ -169,7 +172,13 @@ fn show_posts() -> Html {
 }
 
 async fn get_api_json<T: for<'a> Deserialize<'a>>(path: &str) -> Result<T, String> {
-    let resp: Response = Request::get(path).send().await.unwrap();
+    let api_key: String = format!("Bearer {}", common::API_KEY);
+
+    let resp: Response = Request::get(path)
+        .header("Authorization", &api_key)
+        .send()
+        .await
+        .unwrap();
 
     let resp: Result<T, String> = if resp.ok() {
         resp.json::<T>().await.map_err(|err| err.to_string())

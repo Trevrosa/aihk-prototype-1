@@ -7,11 +7,13 @@ edition = "2021"
 
 [dependencies]
 # utils
-console_error_panic_hook = "0.1.7"
 gloo-net = "0.4"
+
 log = "0.4.17"
-common = { path = "../common" }
+console_error_panic_hook = "0.1.7"
+
 chrono = "0.4.31"
+common = { path = "../common" }
 
 serde = "1.0.189"
 serde_json = "1.0.107"

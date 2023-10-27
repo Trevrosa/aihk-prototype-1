@@ -3,6 +3,7 @@ target/
 target-trunk/
 /dist/
 server/all.db
+.apikey
 
 # temp log dir
 /.log/

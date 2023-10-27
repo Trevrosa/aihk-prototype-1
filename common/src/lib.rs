@@ -59,3 +59,5 @@ impl Default for Post {
         }
     }
 }
+
+pub const API_KEY: &str = include_str!("../../.apikey");

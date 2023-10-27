@@ -1,17 +1,32 @@
-use axum::{extract::State, Json};
-use server::{FromDBComment, FromDBPost, Result};
+use axum::{
+    extract::State,
+    headers::{authorization::Bearer, Authorization},
+    http::StatusCode,
+    response::IntoResponse,
+    Json, TypedHeader,
+};
+use server::{FromDBComment, FromDBPost};
 use sqlx::{Pool, Sqlite};
 
 use common::{Comment, Post};
 use server::{DBComment, DBPost};
 
-pub async fn route(State(db_pool): State<Pool<Sqlite>>) -> Result<Json<Vec<Post>>> {
+pub async fn route(
+    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
+    State(db_pool): State<Pool<Sqlite>>,
+) -> impl IntoResponse {
+    if auth.token() != common::API_KEY {
+        return (StatusCode::UNAUTHORIZED, Json(vec![Post::default()]));
+    }
+
     let db_posts: Vec<DBPost> = sqlx::query_as::<_, DBPost>("SELECT * from posts")
         .fetch_all(&db_pool)
-        .await?;
+        .await
+        .unwrap();
     let db_comments: Vec<DBComment> = sqlx::query_as::<_, DBComment>("SELECT * from comments")
         .fetch_all(&db_pool)
-        .await?;
+        .await
+        .unwrap();
 
     let mut posts: Vec<Post> = Vec::with_capacity(db_posts.len());
 
@@ -33,5 +48,5 @@ pub async fn route(State(db_pool): State<Pool<Sqlite>>) -> Result<Json<Vec<Post>
 
     tracing::debug!("got: {:#?}", posts);
 
-    Ok(Json(posts))
+    (StatusCode::OK, Json(posts))
 }

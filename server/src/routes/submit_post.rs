@@ -1,7 +1,8 @@
 use axum::extract::State;
+use axum::headers::{authorization::Bearer, Authorization};
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
-use axum::Json;
+use axum::{Json, TypedHeader};
 
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
@@ -11,6 +12,45 @@ use sqlx::Sqlite;
 
 use common::Post;
 use server::{get_last_id, store_comment, store_new_post, DBComment};
+
+pub async fn route(
+    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
+    State(db_pool): State<Pool<Sqlite>>,
+    Json(input): Json<Post>,
+) -> impl IntoResponse {
+    if auth.token() != common::API_KEY {
+        return (StatusCode::UNAUTHORIZED, "Wrong bearer".to_string());
+    }
+
+    tracing::debug!("recieved {:?}", input);
+
+    let new_post_id: u32 = get_last_id("posts", &db_pool).await + 1;
+    let new_comment_id: u32 = get_last_id("comments", &db_pool).await + 1;
+
+    let res = store_new_post(&input, new_post_id, &db_pool).await;
+
+    let loading: DBComment =
+        DBComment::new(new_comment_id, new_post_id, "AI", "Loading, please wait!");
+    store_comment(&loading, &db_pool).await.unwrap();
+
+    tokio::spawn(async move {
+        let response: String = get_advice(&input.content);
+
+        sqlx::query("UPDATE comments SET content = $2 WHERE id = $1")
+            .bind(new_comment_id)
+            .bind(response)
+            .execute(&db_pool)
+            .await
+            .unwrap();
+
+        tracing::info!("post {}: ai done", new_post_id);
+    });
+
+    match res {
+        Ok(_) => (StatusCode::ACCEPTED, "OK, reload".to_string()),
+        Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, format!("{err}")),
+    }
+}
 
 fn create_message<'a>(py: Python<'a>, content: &'a str) -> &'a PyDict {
     let message = PyDict::new(py);
@@ -50,38 +90,4 @@ fn get_advice(input: &str) -> String {
             }
         }
     })
-}
-
-pub async fn route(
-    State(db_pool): State<Pool<Sqlite>>,
-    Json(input): Json<Post>,
-) -> impl IntoResponse {
-    tracing::debug!("recieved {:?}", input);
-
-    let new_post_id: u32 = get_last_id("posts", &db_pool).await + 1;
-    let new_comment_id: u32 = get_last_id("comments", &db_pool).await + 1;
-
-    let res = store_new_post(&input, new_post_id, &db_pool).await;
-
-    let loading: DBComment =
-        DBComment::new(new_comment_id, new_post_id, "AI", "Loading, please wait!");
-    store_comment(&loading, &db_pool).await.unwrap();
-
-    tokio::spawn(async move {
-        let response: String = get_advice(&input.content);
-
-        sqlx::query("UPDATE comments SET content = $2 WHERE id = $1")
-            .bind(new_comment_id)
-            .bind(response)
-            .execute(&db_pool)
-            .await
-            .unwrap();
-
-        tracing::info!("post {}: ai done", new_post_id);
-    });
-
-    match res {
-        Ok(_) => (StatusCode::ACCEPTED, "OK, reload".to_string()),
-        Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, format!("{err}")),
-    }
 }

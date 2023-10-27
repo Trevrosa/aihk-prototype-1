@@ -1,7 +1,10 @@
 use axum::extract::State;
+use axum::headers::authorization::Bearer;
+use axum::headers::Authorization;
 use axum::http::StatusCode;
 use axum::response::IntoResponse;
 use axum::Json;
+use axum::TypedHeader;
 
 use common::Comment;
 
@@ -11,9 +14,14 @@ use sqlx::Pool;
 use sqlx::Sqlite;
 
 pub async fn route(
+    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
     State(db_pool): State<Pool<Sqlite>>,
     Json(input): Json<Comment>,
 ) -> impl IntoResponse {
+    if auth.token() != common::API_KEY {
+        return (StatusCode::UNAUTHORIZED, "Wrong bearer".to_string());
+    }
+
     tracing::debug!("recieved {:?}", input);
 
     let next_comment_id: u32 = get_last_id("comments", &db_pool).await + 1;
