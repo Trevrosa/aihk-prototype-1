@@ -10,6 +10,7 @@ use common::Comment;
 
 use server::get_last_id;
 use server::store_new_comment;
+use server::verify_auth;
 use sqlx::Pool;
 use sqlx::Sqlite;
 
@@ -18,7 +19,7 @@ pub async fn route(
     State(db_pool): State<Pool<Sqlite>>,
     Json(input): Json<Comment>,
 ) -> impl IntoResponse {
-    if auth.token() != common::API_KEY {
+    if !verify_auth(&auth) {
         return (StatusCode::UNAUTHORIZED, "Wrong bearer".to_string());
     }
 

@@ -11,14 +11,14 @@ use sqlx::Pool;
 use sqlx::Sqlite;
 
 use common::Post;
-use server::{get_last_id, store_comment, store_new_post, DBComment};
+use server::{get_last_id, store_comment, store_new_post, verify_auth, DBComment};
 
 pub async fn route(
     TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
     State(db_pool): State<Pool<Sqlite>>,
     Json(input): Json<Post>,
 ) -> impl IntoResponse {
-    if auth.token() != common::API_KEY {
+    if !verify_auth(&auth) {
         return (StatusCode::UNAUTHORIZED, "Wrong bearer".to_string());
     }
 

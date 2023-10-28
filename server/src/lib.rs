@@ -1,3 +1,4 @@
+use axum::headers::{authorization::Bearer, Authorization};
 use chrono::Utc;
 
 use common::{Comment, Post};
@@ -137,4 +138,8 @@ impl FromDBComment for Comment {
             timestamp: comment.timestamp,
         }
     }
+}
+
+pub fn verify_auth(header: &Authorization<Bearer>) -> bool {
+    header.token().trim() == common::API_KEY
 }

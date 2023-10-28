@@ -43,7 +43,7 @@ fn switch(routes: Route) -> Html {
                     let api_key: String = format!("Bearer {}", common::API_KEY);
 
                     let req = Request::post("/api/submit_post")
-                        .header("Authorization", &api_key)
+                        .header("authorization", &api_key)
                         .json(&request_body)
                         .unwrap()
                         .send()
@@ -175,7 +175,7 @@ async fn get_api_json<T: for<'a> Deserialize<'a>>(path: &str) -> Result<T, Strin
     let api_key: String = format!("Bearer {}", common::API_KEY);
 
     let resp: Response = Request::get(path)
-        .header("Authorization", &api_key)
+        .header("authorization", &api_key)
         .send()
         .await
         .unwrap();

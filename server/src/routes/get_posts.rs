@@ -5,7 +5,7 @@ use axum::{
     response::IntoResponse,
     Json, TypedHeader,
 };
-use server::{FromDBComment, FromDBPost};
+use server::{verify_auth, FromDBComment, FromDBPost};
 use sqlx::{Pool, Sqlite};
 
 use common::{Comment, Post};
@@ -15,7 +15,7 @@ pub async fn route(
     TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
     State(db_pool): State<Pool<Sqlite>>,
 ) -> impl IntoResponse {
-    if auth.token() != common::API_KEY {
+    if !verify_auth(&auth) {
         return (StatusCode::UNAUTHORIZED, Json(vec![Post::default()]));
     }
 
