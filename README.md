@@ -1,7 +1,5 @@
 ## Usage
 
-Ensure .apikey is not empty and exists in the root directory of the repository.
-
 Run the dev version (auto-reloads server & client on file change) with `./dev.sh`.
 
 Run the pre-compiled version with `./prod.sh`.
