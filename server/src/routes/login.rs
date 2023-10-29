@@ -23,9 +23,8 @@ pub async fn route(
         .fetch_one(&db_pool)
         .await;
 
-    let user = match fetched_user {
-        Ok(user) => user,
-        Err(_) => return (StatusCode::NOT_FOUND, Json(None)),
+    let Ok(user) = fetched_user else {
+        return (StatusCode::NOT_FOUND, Json(None));
     };
 
     let hashed: PasswordHash<'_> = PasswordHash::new(&user.hashed_password).unwrap();

@@ -98,6 +98,9 @@ impl FromDBComment for Comment {
     }
 }
 
+/// # Errors
+///
+/// Will always error if header is not found, otherwise, refer to [`sqlx::error::Error`]
 pub async fn verify_auth(
     header: &Authorization<Bearer>,
     db_pool: &Pool<Sqlite>,

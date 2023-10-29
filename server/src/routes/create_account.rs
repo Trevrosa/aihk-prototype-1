@@ -1,5 +1,5 @@
 use argon2::password_hash::SaltString;
-use argon2::{Argon2, PasswordHash, PasswordVerifier, PasswordHasher};
+use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
@@ -26,7 +26,7 @@ pub async fn route(
 
     let salt: SaltString = SaltString::generate(&mut OsRng);
     let hashed_password: String = Argon2::default()
-        .hash_password(&input.password.as_bytes(), &salt)
+        .hash_password(input.password.as_bytes(), &salt)
         .unwrap()
         .to_string();
 
@@ -48,18 +48,18 @@ pub async fn route(
             {
                 return (StatusCode::UNAUTHORIZED, Json(None));
             }
-        
+
             let new_session_id = SaltString::generate(&mut OsRng).to_string();
-        
+
             sqlx::query("INSERT OR REPLACE INTO sessions (username, id) VALUES ($1, $2)")
                 .bind(input.username)
                 .bind(&new_session_id)
                 .execute(&db_pool)
                 .await
                 .unwrap();
-        
+
             (StatusCode::OK, Json(Some(new_session_id)))
-        },
+        }
         Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, Json(None)),
     }
 }

@@ -80,10 +80,10 @@ fn switch(routes: Route) -> Html {
                             let sta = format!("got session: {session}");
 
                             set_text("status1", &sta);
-                        },
+                        }
                         Err(err) => set_text("status1", &err),
                     };
-                })
+                });
             });
 
             let signup: Callback<MouseEvent> = Callback::from(move |_| {
@@ -99,7 +99,7 @@ fn switch(routes: Route) -> Html {
                         Ok(session) => gloo_storage::LocalStorage::set("session", session).unwrap(),
                         Err(err) => set_text("status1", &err),
                     };
-                })
+                });
             });
 
             html! {
@@ -162,7 +162,7 @@ fn signed_in() -> Html {
 
         use_effect(move || {
             if data.is_none() {
-                if let Ok(_) = gloo_storage::LocalStorage::get::<String>("session") {
+                if gloo_storage::LocalStorage::get::<String>("session").is_ok() {
                     data.set(Some("signed in"));
                 } else {
                     data.set(Some("not signed in"));
@@ -271,7 +271,12 @@ where
     T: for<'a> Deserialize<'a>,
     J: Serialize,
 {
-    let resp: Response = Request::post(path).json(json).unwrap().send().await.unwrap();
+    let resp: Response = Request::post(path)
+        .json(json)
+        .unwrap()
+        .send()
+        .await
+        .unwrap();
 
     let resp: Result<T, String> = if resp.ok() {
         resp.json::<T>().await.map_err(|err| err.to_string())
