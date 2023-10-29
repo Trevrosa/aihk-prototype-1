@@ -96,7 +96,13 @@ fn switch(routes: Route) -> Html {
                     let resp = post_api_json::<String, _>("/api/create_account", &request).await;
 
                     match resp {
-                        Ok(session) => gloo_storage::LocalStorage::set("session", session).unwrap(),
+                        Ok(session) => {
+                            gloo_storage::LocalStorage::set("session", &session).unwrap();
+
+                            let sta = format!("created account! session: {session}");
+
+                            set_text("status1", &sta);
+                        },
                         Err(err) => set_text("status1", &err),
                     };
                 });
