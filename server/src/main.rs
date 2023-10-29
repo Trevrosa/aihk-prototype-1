@@ -22,8 +22,9 @@ use tower::{ServiceBuilder, ServiceExt};
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
 
-use crate::routes::{add_comment, get_posts, submit_post};
+use crate::routes::{add_comment, create_account, get_posts, login, submit_post};
 
+pub mod db;
 mod routes;
 
 #[allow(clippy::unused_async)]
@@ -62,34 +63,56 @@ async fn main() -> anyhow::Result<()> {
     };
 
     {
-        let mut sqlite_connection = SqliteConnectOptions::new()
+        let mut db_connection = SqliteConnectOptions::new()
             .filename(db_path.split("//").nth(1).unwrap())
             .create_if_missing(true)
             .connect()
             .await?;
 
-        sqlx::query("CREATE TABLE IF NOT EXISTS posts (id INTEGER PRIMARY KEY, username TEXT NOT NULL, content TEXT NOT NULL, timestamp INTEGER NOT NULL)")
-            .execute(&mut sqlite_connection)
+        sqlx::query("CREATE TABLE IF NOT EXISTS posts (id INTEGER PRIMARY KEY, username TEXT NOT NULL, content TEXT NOT NULL, created INTEGER NOT NULL)")
+            .execute(&mut db_connection)
             .await?;
 
-        sqlx::query("CREATE TABLE IF NOT EXISTS comments (id INTEGER PRIMARY KEY, post_id INTEGER NOT NULL, username TEXT NOT NULL, content TEXT NOT NULL, timestamp INTEGER NOT NULL)")
-            .execute(&mut sqlite_connection)
+        sqlx::query("CREATE TABLE IF NOT EXISTS comments (id INTEGER PRIMARY KEY, post_id INTEGER NOT NULL, username TEXT NOT NULL, content TEXT NOT NULL, created INTEGER NOT NULL)")
+            .execute(&mut db_connection)
             .await?;
 
-        tracing::debug!("db,table exists");
+        sqlx::query("CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, hashed_password TEXT NOT NULL, created INTEGER NOT NULL)")
+            .execute(&mut db_connection)
+            .await?;
+
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS sessions (username TEXT PRIMARY KEY, id INTEGER NOT NULL)",
+        )
+        .execute(&mut db_connection)
+        .await?;
+
+        tracing::debug!("db,tables exists");
     }
 
     let db_pool = SqlitePoolOptions::new()
-        .max_connections(5)
+        .max_connections(20)
         .connect(db_path)
         .await?;
 
     tracing::debug!("db pool ready");
 
+    #[rustfmt::skip]
     let app = Router::new()
+        // does not require session id, pure GET
         .route("/api/get_posts", get(get_posts::route))
+        
+        // requires valid Authentication<Bearer> = session_id and String body
         .route("/api/submit_post", post(submit_post::route))
+        
+        // requires valid Authentication<Bearer> = session_id and Json<InputComment>
         .route("/api/add_comment", post(add_comment::route))
+        
+        // does not require session id, requires valid Json<User>
+        .route("/api/create_account", post(create_account::route))
+        
+        // does not require session id, requires valid Json<User>
+        .route("/api/login", post(login::route))
         .with_state(db_pool)
         .fallback_service(get(|req: Request<Body>| async move {
             let res = ServeDir::new(&opt.static_dir).oneshot(req).await.unwrap(); // serve dir is infallible

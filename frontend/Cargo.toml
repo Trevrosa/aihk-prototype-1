@@ -8,6 +8,7 @@ edition = "2021"
 [dependencies]
 # utils
 gloo-net = "0.4"
+gloo-storage = "0.3"
 
 log = "0.4.17"
 console_error_panic_hook = "0.1.7"
@@ -33,6 +34,3 @@ features = [
     "HtmlTextAreaElement",
     "Document",
 ]
-
-[build-dependencies]
-rand = "0.8.5"

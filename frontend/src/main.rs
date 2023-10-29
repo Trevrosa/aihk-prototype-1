@@ -2,14 +2,15 @@ use chrono::{DateTime, Local};
 use frontend::{get_textarea, set_text};
 use gloo_net::http::{Request, Response};
 
+use gloo_storage::Storage;
 use wasm_bindgen_futures::spawn_local;
 
 use yew::{prelude::*, virtual_dom::VNode};
 use yew_router::prelude::*;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-use common::Post;
+use common::{Post, User};
 
 #[derive(Clone, Routable, PartialEq)]
 enum Route {
@@ -26,25 +27,26 @@ fn switch(routes: Route) -> Html {
         Route::Home => {
             let submit_post: Callback<MouseEvent> = Callback::from(move |_| {
                 let texts: String = get_textarea("input");
-                let user: String = get_textarea("user");
 
                 spawn_local(async move {
-                    if user.is_empty() || texts.is_empty() {
-                        set_text("status", "cannot be empty");
+                    if texts.is_empty() {
+                        set_text("status2", "cannot be empty");
                         return;
                     }
 
-                    let request_body: Post = Post::new(user, texts);
-                    log::info!(
-                        "sent payload: {}",
-                        serde_json::to_string(&request_body).unwrap()
-                    );
+                    let session_id =
+                        if let Ok(id) = gloo_storage::LocalStorage::get::<String>("session") {
+                            format!("Bearer {id}")
+                        } else {
+                            set_text("status2", "not signed in");
+                            return;
+                        };
 
-                    let api_key: String = format!("Bearer {}", common::API_KEY);
+                    log::info!("{}", &session_id);
 
                     let req = Request::post("/api/submit_post")
-                        .header("authorization", &api_key)
-                        .json(&request_body)
+                        .header("authorization", &session_id)
+                        .body(texts)
                         .unwrap()
                         .send()
                         .await;
@@ -58,9 +60,46 @@ fn switch(routes: Route) -> Html {
                             log::info!("Failed: {:?}", resp);
                         }
 
-                        set_text("status", &resp);
+                        set_text("status2", &resp);
                     }
                 });
+            });
+
+            let login: Callback<MouseEvent> = Callback::from(move |_| {
+                let username: String = get_textarea("user");
+                let password: String = get_textarea("pass");
+
+                let request: User = User::new(username, password);
+
+                spawn_local(async move {
+                    let resp = post_api_json::<String, _>("/api/login", &request).await;
+
+                    match resp {
+                        Ok(session) => {
+                            gloo_storage::LocalStorage::set("session", &session).unwrap();
+                            let sta = format!("got session: {session}");
+
+                            set_text("status1", &sta);
+                        },
+                        Err(err) => set_text("status1", &err),
+                    };
+                })
+            });
+
+            let signup: Callback<MouseEvent> = Callback::from(move |_| {
+                let username: String = get_textarea("user");
+                let password: String = get_textarea("pass");
+
+                let request: User = User::new(username, password);
+
+                spawn_local(async move {
+                    let resp = post_api_json::<String, _>("/api/create_account", &request).await;
+
+                    match resp {
+                        Ok(session) => gloo_storage::LocalStorage::set("session", session).unwrap(),
+                        Err(err) => set_text("status1", &err),
+                    };
+                })
             });
 
             html! {
@@ -72,16 +111,29 @@ fn switch(routes: Route) -> Html {
                         </div>
                     </div>
                     <div class="inputing">
-                        <h2>{ "Input" }</h2>
+                        <h1>{ "Input" }</h1>
+
+                        <h2>{ "Login" }</h2>
 
                         <p>{ "username" }</p>
                         <textarea id="user"/>
+
+                        <p>{ "password" }</p>
+                        <textarea id="pass"/>
+
+                        <button onclick={login}>{ "Log in" }</button>
+                        <button onclick={signup}>{ "Create account" }</button>
+                        <p class="statuses" id="status1"/>
+
+                        <h2>{ "Post" }</h2>
+
+                        <Signed/>
 
                         <p>{ "content" }</p>
                         <textarea id="input"/>
 
                         <button onclick={submit_post}>{ "Submit" }</button>
-                        <p id="status"/>
+                        <p class="statuses" id="status2"/>
                     </div>
                 </div>
             }
@@ -101,30 +153,73 @@ fn app() -> Html {
     }
 }
 
-#[function_component(Posts)]
-fn show_posts() -> Html {
-    let data: UseStateHandle<Result<Vec<Post>, String>> =
-        use_state(|| Err(String::from("not found")));
+#[function_component(Signed)]
+fn signed_in() -> Html {
+    let data = use_state(|| None);
 
     {
         let data = data.clone();
 
-        use_effect(|| {
-            if data.is_err() {
-                spawn_local(async move {
-                    let posts = get_api_json::<Vec<Post>>("/api/get_posts").await;
+        use_effect(move || {
+            if data.is_none() {
+                if let Ok(_) = gloo_storage::LocalStorage::get::<String>("session") {
+                    data.set(Some("signed in"));
+                } else {
+                    data.set(Some("not signed in"));
+                }
+            }
+        });
+    }
 
-                    log::info!("got {} posts", posts.as_ref().map_or(0, std::vec::Vec::len));
+    let signed = if let Some(data) = &*data {
+        data
+    } else {
+        "loading"
+    };
+
+    html! {
+        <h2>{ signed }</h2>
+    }
+}
+
+#[function_component(Posts)]
+fn show_posts() -> Html {
+    let data: UseStateHandle<Option<Vec<Post>>> = use_state(|| None);
+
+    {
+        let data: UseStateHandle<Option<Vec<Post>>> = data.clone();
+
+        use_effect(|| {
+            if data.is_none() {
+                spawn_local(async move {
+                    let posts = get_api_json::<Option<Vec<Post>>>("/api/get_posts").await;
+
+                    log::info!(
+                        "got {} posts",
+                        match posts.as_ref() {
+                            Ok(res) => match res {
+                                Some(posts) => posts.len(),
+                                None => 0,
+                            },
+                            Err(_) => 0,
+                        }
+                    );
+
+                    let posts = match posts {
+                        Ok(posts) => posts,
+                        Err(_) => None,
+                    };
+
                     data.set(posts);
                 });
             }
         });
     }
 
-    let posts: Vec<Post> = if let Ok(data) = &*data {
+    let posts: Vec<Post> = if let Some(data) = &*data {
         data.clone()
     } else {
-        vec![Post::default()]
+        return html! {};
     };
 
     let posts: VNode = posts
@@ -137,7 +232,7 @@ fn show_posts() -> Html {
                     .iter()
                     .map(|comment| {
                         html! {
-                            <div id={ comment.id.map_or("none".to_string(), |id| id.to_string()) }>
+                            <div id={ comment.id.to_string() }>
                                 {
                                     format!("{}: {}", &comment.username, &comment.content)
                                 }
@@ -149,12 +244,12 @@ fn show_posts() -> Html {
             };
 
             let timestamp: String =
-                DateTime::<Local>::from(DateTime::from_timestamp(post.timestamp, 0).unwrap())
+                DateTime::<Local>::from(DateTime::from_timestamp(post.created, 0).unwrap())
                     .format("%d/%m/%Y %H:%M")
                     .to_string();
 
             html! {
-                <div class="post" id={ post.id.map_or("none".to_string(), |id| id.to_string()) }>
+                <div class="post" id={ post.id.to_string() }>
                     <div class="post-header">
                         <p class="username">{ format!("{} said:", &post.username) }</p>
                         <p class="timestamp">{ timestamp }</p>
@@ -171,14 +266,29 @@ fn show_posts() -> Html {
     }
 }
 
-async fn get_api_json<T: for<'a> Deserialize<'a>>(path: &str) -> Result<T, String> {
-    let api_key: String = format!("Bearer {}", common::API_KEY);
+async fn post_api_json<T, J>(path: &str, json: &J) -> Result<T, String>
+where
+    T: for<'a> Deserialize<'a>,
+    J: Serialize,
+{
+    let resp: Response = Request::post(path).json(json).unwrap().send().await.unwrap();
 
-    let resp: Response = Request::get(path)
-        .header("authorization", &api_key)
-        .send()
-        .await
-        .unwrap();
+    let resp: Result<T, String> = if resp.ok() {
+        resp.json::<T>().await.map_err(|err| err.to_string())
+    } else {
+        Err(format!(
+            "Error fetching data {} ({}): \n{}",
+            resp.status(),
+            resp.status_text(),
+            resp.text().await.unwrap(),
+        ))
+    };
+
+    resp
+}
+
+async fn get_api_json<T: for<'a> Deserialize<'a>>(path: &str) -> Result<T, String> {
+    let resp: Response = Request::get(path).send().await.unwrap();
 
     let resp: Result<T, String> = if resp.ok() {
         resp.json::<T>().await.map_err(|err| err.to_string())

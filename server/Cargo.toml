@@ -8,10 +8,14 @@ edition = "2021"
 [dependencies]
 # util crates
 anyhow = "1.0.75"
-clap = { version = "4.0.32", features = ["derive"] }
-serde = "1.0.189"
 chrono = "0.4.31"
 common = { path = "../common" }
+
+argon2 = "0.5.2"
+rand = "0.8.5"
+
+clap = { version = "4.0.32", features = ["derive"] }
+serde = "1.0.189"
 
 # specific crates
 pyo3 = "0.20.0"

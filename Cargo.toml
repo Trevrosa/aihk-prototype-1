@@ -5,3 +5,6 @@ members = [
   "frontend",
   "common",
 ]
+
+[profile.release]
+lto = true

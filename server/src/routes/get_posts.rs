@@ -1,24 +1,15 @@
-use axum::{
-    extract::State,
-    headers::{authorization::Bearer, Authorization},
-    http::StatusCode,
-    response::IntoResponse,
-    Json, TypedHeader,
-};
-use server::{verify_auth, FromDBComment, FromDBPost};
+use axum::{extract::State, http::StatusCode, Json};
+use server::{FromDBComment, FromDBPost};
 use sqlx::{Pool, Sqlite};
 
 use common::{Comment, Post};
 use server::{DBComment, DBPost};
 
+/// Output: `(StatusCode, Json<Option<Vec<Post>>>)`
+#[rustfmt::skip]
 pub async fn route(
-    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
-    State(db_pool): State<Pool<Sqlite>>,
-) -> impl IntoResponse {
-    if !verify_auth(&auth) {
-        return (StatusCode::UNAUTHORIZED, Json(vec![Post::default()]));
-    }
-
+    State(db_pool): State<Pool<Sqlite>>
+) -> (StatusCode, Json<Option<Vec<Post>>>) {
     let db_posts: Vec<DBPost> = sqlx::query_as::<_, DBPost>("SELECT * from posts")
         .fetch_all(&db_pool)
         .await
@@ -48,5 +39,5 @@ pub async fn route(
 
     tracing::debug!("got: {:#?}", posts);
 
-    (StatusCode::OK, Json(posts))
+    (StatusCode::OK, Json(Some(posts)))
 }

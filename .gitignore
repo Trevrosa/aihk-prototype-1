@@ -11,3 +11,4 @@ server/all.db
 # development
 /dev.html
 /venv
+/frontend/assets

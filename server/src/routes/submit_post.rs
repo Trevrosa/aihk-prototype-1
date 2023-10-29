@@ -1,40 +1,54 @@
 use axum::extract::State;
 use axum::headers::{authorization::Bearer, Authorization};
 use axum::http::StatusCode;
-use axum::response::IntoResponse;
-use axum::{Json, TypedHeader};
+use axum::TypedHeader;
 
+use chrono::Utc;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 
 use sqlx::Pool;
 use sqlx::Sqlite;
 
-use common::Post;
-use server::{get_last_id, store_comment, store_new_post, verify_auth, DBComment};
+use crate::db::{get_last_id, store_comment, store_post};
+use server::{verify_auth, DBComment, DBPost};
 
+/// Input: `input_content: String`
+///
+/// Output: `(StatusCode, String)`
 pub async fn route(
     TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
     State(db_pool): State<Pool<Sqlite>>,
-    Json(input): Json<Post>,
-) -> impl IntoResponse {
-    if !verify_auth(&auth) {
+    input: String,
+) -> (StatusCode, String) {
+    let session = verify_auth(&auth, &db_pool).await;
+
+    if session.is_err() {
         return (StatusCode::UNAUTHORIZED, "Wrong bearer".to_string());
     }
+
+    let username: String = session.unwrap().username;
 
     tracing::debug!("recieved {:?}", input);
 
     let new_post_id: u32 = get_last_id("posts", &db_pool).await + 1;
     let new_comment_id: u32 = get_last_id("comments", &db_pool).await + 1;
 
-    let res = store_new_post(&input, new_post_id, &db_pool).await;
+    let post: DBPost = DBPost {
+        id: new_post_id,
+        created: Utc::now().timestamp(),
+        username,
+        content: input.clone(),
+    };
+
+    let res = store_post(&post, &db_pool).await;
 
     let loading: DBComment =
         DBComment::new(new_comment_id, new_post_id, "AI", "Loading, please wait!");
     store_comment(&loading, &db_pool).await.unwrap();
 
     tokio::spawn(async move {
-        let response: String = get_advice(&input.content);
+        let response: String = get_advice(&input);
 
         sqlx::query("UPDATE comments SET content = $2 WHERE id = $1")
             .bind(new_comment_id)
@@ -47,7 +61,7 @@ pub async fn route(
     });
 
     match res {
-        Ok(_) => (StatusCode::ACCEPTED, "OK, reload".to_string()),
+        Ok(_) => (StatusCode::OK, "OK, reload".to_string()),
         Err(err) => (StatusCode::INTERNAL_SERVER_ERROR, format!("{err}")),
     }
 }
@@ -65,7 +79,7 @@ fn get_advice(input: &str) -> String {
         let chat: &PyAny = py.import("g4f").unwrap().getattr("ChatCompletion").unwrap();
 
         let prompt: String = format!(
-            r#"Depending on this message "{input}", what advice would you give this person? Keep it concise. Only respond with the advice."#
+            r#"Depending on this message "{input}", what advice would you give this person? Keep your advice under 4 sentences. Only respond with the advice."#
         );
 
         let prompt: &PyDict = create_message(py, &prompt);

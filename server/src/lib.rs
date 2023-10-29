@@ -2,92 +2,50 @@ use axum::headers::{authorization::Bearer, Authorization};
 use chrono::Utc;
 
 use common::{Comment, Post};
-use sqlx::{sqlite::SqliteQueryResult, FromRow, Pool, Row, Sqlite};
+use sqlx::{FromRow, Pool, Sqlite};
 
-/// # Errors
-/// See [`sqlx::error::Error`]
-pub async fn store_new_post(
-    post: &Post,
-    post_id: u32,
-    db_pool: &Pool<Sqlite>,
-) -> std::result::Result<SqliteQueryResult, sqlx::error::Error> {
-    sqlx::query("INSERT INTO posts (id, username, content, timestamp) VALUES ($1, $2, $3, $4)")
-        .bind(post_id)
-        .bind(&post.username)
-        .bind(&post.content)
-        .bind(post.timestamp)
-        .execute(db_pool)
-        .await
+#[derive(Debug, FromRow)]
+pub struct DBSession {
+    pub username: String,
+    pub id: String,
 }
 
-/// # Errors
-/// See [`sqlx::error::Error`]
-pub async fn store_new_comment(
-    comment: &Comment,
-    comment_id: u32,
-    db_pool: &Pool<Sqlite>,
-) -> std::result::Result<SqliteQueryResult, sqlx::error::Error> {
-    sqlx::query("INSERT INTO comments (id, post_id, username, content, timestamp) VALUES ($1, $2, $3, $4, $5)")
-        .bind(comment_id)
-        .bind(comment.post_id)
-        .bind(&comment.username)
-        .bind(&comment.content)
-        .bind(comment.timestamp)
-        .execute(db_pool)
-        .await
+/// `User`s are never stored in database. Instead, `DBUser` is used since passwords are hashed before stored.
+#[derive(Debug, FromRow)]
+pub struct DBUser {
+    pub created: i64,
+
+    pub username: String,
+    pub hashed_password: String,
 }
 
-/// # Errors
-/// See [`sqlx::error::Error`]
-pub async fn store_comment(
-    comment: &DBComment,
-    db_pool: &Pool<Sqlite>,
-) -> std::result::Result<SqliteQueryResult, sqlx::error::Error> {
-    sqlx::query("INSERT INTO comments (id, post_id, username, content, timestamp) VALUES ($1, $2, $3, $4, $5)")
-        .bind(comment.id)
-        .bind(comment.post_id)
-        .bind(&comment.username)
-        .bind(&comment.content)
-        .bind(comment.timestamp)
-        .execute(db_pool)
-        .await
-}
-
-pub async fn get_last_id(table: &str, db_pool: &Pool<Sqlite>) -> u32 {
-    sqlx::query(&format!("SELECT id FROM {table} ORDER BY id DESC LIMIT 1"))
-        .fetch_one(db_pool)
-        .await
-        .map_or(0, |row| row.get::<u32, usize>(0))
-}
-
-/// `DBPost`s are individual posts with an `id`, without comments attached to them.
+/// `DBPost`s are individual posts without comments attached to them.
 ///
-/// This is because in the `SQLite` database, posts and comments are stored in different tables.
+/// This is because in the `SQLite` database, posts and comments are stored in different tables; they cannot be stored together.
 ///
-/// So, they cannot be stored together.
-///
-/// `DBPost`s are never sent or recieved since only it has access to the database.
+/// `DBPost`s are never sent or recieved since only it is stored in the database.
 #[derive(Debug, FromRow)]
 pub struct DBPost {
     /// Because an `id` is stored as an `INTEGER PRIMARY KEY`, `id` has to be `u32`
     pub id: u32,
+    pub created: i64,
 
     pub username: String,
     pub content: String,
-    pub timestamp: i64,
 }
 
 /// `DBComment`s are individual comments with an `id` and `post_id`.
 ///
-/// `DBPost`s are never sent or recieved, since only it has access to the database.
+/// `DBPost`s are never sent or recieved since only it is stored in the database.
 #[derive(Debug, FromRow)]
 pub struct DBComment {
     pub id: u32,
     pub post_id: u32,
 
+    pub created: i64,
+
     pub username: String,
     pub content: String,
-    pub timestamp: i64,
 }
 
 impl DBComment {
@@ -98,7 +56,7 @@ impl DBComment {
             post_id,
             username: username.to_string(),
             content: content.to_string(),
-            timestamp: Utc::now().timestamp(),
+            created: Utc::now().timestamp(),
         }
     }
 }
@@ -111,11 +69,11 @@ pub trait FromDBPost {
 impl FromDBPost for Post {
     fn from_db(post: DBPost, comments: Option<Vec<Comment>>) -> Self {
         Self {
-            id: Some(post.id),
+            id: post.id,
 
             username: post.username,
             content: post.content,
-            timestamp: post.timestamp,
+            created: post.created,
 
             comments,
         }
@@ -130,16 +88,26 @@ pub trait FromDBComment {
 impl FromDBComment for Comment {
     fn from_db(comment: &DBComment) -> Self {
         Self {
-            id: Some(comment.id),
+            id: comment.id,
             post_id: comment.post_id,
 
             username: comment.username.clone(),
             content: comment.content.clone(),
-            timestamp: comment.timestamp,
+            created: comment.created,
         }
     }
 }
 
-pub fn verify_auth(header: &Authorization<Bearer>) -> bool {
-    header.token().trim() == common::API_KEY
+pub async fn verify_auth(
+    header: &Authorization<Bearer>,
+    db_pool: &Pool<Sqlite>,
+) -> Result<DBSession, sqlx::error::Error> {
+    let res = sqlx::query_as::<_, DBSession>("SELECT * FROM sessions WHERE id = $1")
+        .bind(header.token().trim())
+        .fetch_one(db_pool)
+        .await;
+
+    tracing::debug!("{:#?}", &res);
+
+    res
 }
