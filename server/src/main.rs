@@ -22,7 +22,7 @@ use tower::{ServiceBuilder, ServiceExt};
 use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
 
-use crate::routes::{add_comment, create_account, get_posts, login, submit_post};
+use crate::routes::{add_comment, create_account, get_posts, login, submit_post, validate_session};
 
 pub mod db;
 mod routes;
@@ -113,6 +113,9 @@ async fn main() -> anyhow::Result<()> {
         
         // does not require session id, requires valid Json<User>
         .route("/api/login", post(login::route))
+
+        // requires valid Authentication<Bearer> = session_id
+        .route("/api/validate_session", get(validate_session::route))
         .with_state(db_pool)
         .fallback_service(get(|req: Request<Body>| async move {
             let res = ServeDir::new(&opt.static_dir).oneshot(req).await.unwrap(); // serve dir is infallible

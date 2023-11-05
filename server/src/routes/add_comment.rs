@@ -7,6 +7,7 @@ use axum::TypedHeader;
 
 use chrono::Utc;
 use common::inputs::InputComment;
+use rustrict::{Censor, Type};
 use server::DBComment;
 
 use crate::db::{get_last_id, store_comment};
@@ -24,6 +25,11 @@ pub async fn route(
     let session = verify_auth(&auth, &db_pool).await;
     if session.is_err() {
         return (StatusCode::UNAUTHORIZED, "Wrong bearer".to_string());
+    }
+
+    let analysis = Censor::from_str(&input.content).analyze();
+    if analysis.is(Type::SEVERE | Type::SEXUAL) {
+        return (StatusCode::FORBIDDEN, "Cannot say that".to_string());
     }
 
     let username = session.unwrap().username;

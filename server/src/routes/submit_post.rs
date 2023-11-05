@@ -3,6 +3,7 @@ use axum::headers::{authorization::Bearer, Authorization};
 use axum::http::StatusCode;
 use axum::TypedHeader;
 
+use rustrict::{Censor, Type};
 use chrono::Utc;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
@@ -22,9 +23,13 @@ pub async fn route(
     input: String,
 ) -> (StatusCode, String) {
     let session = verify_auth(&auth, &db_pool).await;
-
     if session.is_err() {
         return (StatusCode::UNAUTHORIZED, "Wrong bearer".to_string());
+    }
+
+    let analysis = Censor::from_str(&input).analyze();
+    if analysis.is(Type::SEVERE | Type::SEXUAL) {
+        return (StatusCode::FORBIDDEN, "Cannot say that".to_string());
     }
 
     let username: String = session.unwrap().username;

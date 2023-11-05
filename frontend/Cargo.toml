@@ -13,6 +13,7 @@ gloo-storage = "0.3"
 log = "0.4.17"
 console_error_panic_hook = "0.1.7"
 
+rustrict = "0.7.12"
 chrono = "0.4.31"
 common = { path = "../common" }
 
@@ -33,4 +34,6 @@ version = "0.3.64"
 features = [
     "HtmlTextAreaElement",
     "Document",
+    "Element",
+    "HtmlCollection",
 ]

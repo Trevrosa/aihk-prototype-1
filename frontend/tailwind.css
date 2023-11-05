@@ -1,0 +1,119 @@
+body {
+  margin: 0;
+  padding: 0;
+  display: flex;
+  justify-content: center;
+  /* Center horizontally */
+  align-items: center;
+  /* Center vertically */
+  height: 100vh;
+}
+
+.container {
+  display: flex;
+  width: 100%;
+  max-width: 1000px;
+  /* Optional: Adjust the maximum width of the container */
+}
+
+.main {
+  flex: 1;
+  overflow-y: auto;
+  /* Enable scrolling */
+  display: flex;
+  flex-direction: column;
+  /* Items on separate lines */
+  justify-content: flex-start;
+  /* Align items to the top */
+  align-items: center;
+  /* Center content horizontally */
+  height: 100vh;
+  /* Set a fixed height */
+}
+
+.main::-webkit-scrollbar {
+  width: 0;
+  /* Hide the scrollbar */
+}
+
+.inputing {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  /* Items on separate lines */
+  justify-content: center;
+  /* Center content vertically */
+  align-items: center;
+  /* Center content horizontally */
+  height: 100vh;
+  /* Set a fixed height */
+}
+
+.inputing::-webkit-scrollbar {
+  width: 0;
+  /* Hide the scrollbar */
+}
+
+textarea {
+  resize: none;
+}
+
+.statuses {
+  margin: 10px 0;
+  padding: 5px;
+  border: 1px solid #999;
+}
+
+.outside {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: row;
+  gap: 30%;
+}
+
+.post {
+  border: 1px solid #999;
+  margin-bottom: 10px;
+}
+
+.posts div {
+  padding: 10px;
+  background-color: #f2f2f2;
+}
+
+.post-header {
+  display: flex;
+  /* Add display: flex to create a flex container */
+  flex-direction: row;
+  /* Set flex-direction to row */
+  align-items: baseline;
+  /* Align items to the baseline */
+}
+
+.username {
+  font-weight: bold;
+  margin: 5px;
+}
+
+.timestamp {
+  margin-left: auto;
+  /* Move to the right side */
+  font-style: italic;
+  /* Add italic style for timestamp */
+  color: #888;
+  /* Add color for timestamp */
+  white-space: nowrap;
+  /* Prevent line break */
+}
+
+.content {
+  padding: 10px;
+}
+
+.comments {
+  font-style: italic;
+  color: #888;
+  margin-bottom: 5px;
+}
