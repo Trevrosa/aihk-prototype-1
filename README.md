@@ -1,3 +1,7 @@
+## How can I use this?
+
+Here! https://aihk1.trevrosa.dev
+
 ## Usage
 
 Run the dev version (auto-reloads server & client on file change) with `./dev.sh`.
@@ -11,7 +15,7 @@ Usage: server [OPTIONS]
 
 Options:
   -l, --log <LOG_LEVEL>          set the log level [default: debug]
-  -p, --port <PORT>              set the listen port [default: 8080]
+  -p, --port <PORT>              set the listen port [default: 8082]
       --static-dir <STATIC_DIR>  set the directory where static files are to be found [default: ../dist]
   -h, --help                     Print help
 ```

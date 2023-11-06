@@ -4,6 +4,7 @@ use chrono::Utc;
 use common::{Comment, Post};
 use sqlx::{FromRow, Pool, Sqlite};
 
+/// A user sesion
 #[derive(Debug, FromRow)]
 pub struct DBSession {
     pub username: String,
