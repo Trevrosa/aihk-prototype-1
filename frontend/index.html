@@ -12,16 +12,8 @@
         <base href="/"/>
     </head>
 
-    <body onload="setOptions()">
+    <body>
         <script>
-            function setOptions() {
-                if (localStorage.getItem("censor")) {
-                    document.getElementById("uncensor").checked = true;
-                } else {
-                    document.getElementById("uncensor").checked = false;
-                }
-            }
-
             function show(id) {if (sessionStorage.getItem("opened")) {return} let element=document.getElementById(id);element.style.visibility = 'visible';sessionStorage.setItem("opened", "yes")}
             function hide(id) {let element=document.getElementById(id);element.style.visibility = 'hidden';sessionStorage.removeItem("opened")}
         </script>

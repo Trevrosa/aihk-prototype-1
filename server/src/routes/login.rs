@@ -38,12 +38,14 @@ pub async fn route(
 
     let new_session_id = SaltString::generate(&mut OsRng).to_string();
 
-    sqlx::query("INSERT OR REPLACE INTO sessions (username, id) VALUES ($1, $2)")
+    let query = sqlx::query("INSERT OR REPLACE INTO sessions (username, id) VALUES ($1, $2)")
         .bind(user.username)
         .bind(&new_session_id)
         .execute(&db_pool)
-        .await
-        .unwrap();
+        .await;
 
-    (StatusCode::OK, Json(Some(new_session_id)))
+    match query {
+        Ok(_) => (StatusCode::OK, Json(Some(new_session_id))),
+        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, Json(None)),
+    }
 }

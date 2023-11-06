@@ -3,12 +3,14 @@ use serde::{Deserialize, Serialize};
 
 pub mod inputs;
 
+/// A user session that can be `Serialized` and `Deserialized`
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Session {
     pub username: String,
     pub id: String,
 }
 
+/// A user that can be `Serialized` and `Deserialized`
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct User {
     pub created: i64,
@@ -28,6 +30,8 @@ impl User {
     }
 }
 
+/// A post that can be `Serialized` and `Deserialized`
+///
 /// `Post`s are sent and recieved by both `frontend` and `server`.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Post {
@@ -41,6 +45,8 @@ pub struct Post {
     pub comments: Option<Vec<Comment>>,
 }
 
+/// A that can be `Serialized` and `Deserialized`
+///
 /// `Comment`s are sent and recieved by both `frontend` and `server`.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Comment {

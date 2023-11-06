@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["verify_auth"],"struct":["DBComment","DBPost","DBSession","DBUser"],"trait":["FromDBComment","FromDBPost"]};

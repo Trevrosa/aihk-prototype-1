@@ -39,5 +39,9 @@ pub async fn route(
 
     tracing::debug!("got: {:#?}", posts);
 
-    (StatusCode::OK, Json(Some(posts)))
+    if posts.is_empty() {
+        (StatusCode::OK, Json(None))
+    } else {
+        (StatusCode::OK, Json(Some(posts)))
+    }
 }

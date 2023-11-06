@@ -1,5 +1,6 @@
 use argon2::password_hash::SaltString;
-use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
+use argon2::{Argon2, PasswordHasher};
+
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
@@ -40,15 +41,6 @@ pub async fn route(
 
     match res {
         Ok(_) => {
-            let hashed: PasswordHash<'_> = PasswordHash::new(&hashed_password).unwrap();
-
-            if Argon2::default()
-                .verify_password(input.password.as_bytes(), &hashed)
-                .is_err()
-            {
-                return (StatusCode::UNAUTHORIZED, Json(None));
-            }
-
             let new_session_id = SaltString::generate(&mut OsRng).to_string();
 
             sqlx::query("INSERT OR REPLACE INTO sessions (username, id) VALUES ($1, $2)")
@@ -60,6 +52,18 @@ pub async fn route(
 
             (StatusCode::OK, Json(Some(new_session_id)))
         }
-        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, Json(None)),
+        Err(err) => {
+            if let sqlx::Error::Database(err) = err {
+                if err.is_unique_violation() {
+                    (StatusCode::CONFLICT, Json(None))
+                } else {
+                    tracing::error!("{err:?}");
+                    (StatusCode::INTERNAL_SERVER_ERROR, Json(None))
+                }
+            } else {
+                tracing::error!("{err:?}");
+                (StatusCode::INTERNAL_SERVER_ERROR, Json(None))
+            }
+        }
     }
 }

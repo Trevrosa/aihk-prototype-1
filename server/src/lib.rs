@@ -99,6 +99,8 @@ impl FromDBComment for Comment {
     }
 }
 
+/// Returns [`Ok(DBSession)`] if `session_id` was found in database, otherwise, return [`Err(sqlx::error::Error)`]
+///
 /// # Errors
 ///
 /// Will always error if header is not found, otherwise, refer to [`sqlx::error::Error`]

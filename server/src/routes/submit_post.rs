@@ -3,10 +3,10 @@ use axum::headers::{authorization::Bearer, Authorization};
 use axum::http::StatusCode;
 use axum::TypedHeader;
 
-use rustrict::{Censor, Type};
 use chrono::Utc;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
+use rustrict::{Censor, Type};
 
 use sqlx::Pool;
 use sqlx::Sqlite;
