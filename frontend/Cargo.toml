@@ -32,8 +32,7 @@ yew-router = "0.17.0"
 [dependencies.web-sys]
 version = "0.3.64"
 features = [
-    "HtmlTextAreaElement",
+    "HtmlInputElement",
     "Document",
     "Element",
-    "HtmlCollection",
 ]

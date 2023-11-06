@@ -1,12 +1,13 @@
 use chrono::{DateTime, Local, Utc};
-use frontend::{get_document, get_textarea, set_text};
+use frontend::{get_document, get_input, set_text};
 use gloo_net::http::{Request, Response};
 
-use gloo_storage::{Storage, LocalStorage};
+use gloo_storage::{Storage, LocalStorage, SessionStorage};
 use rustrict::CensorStr;
+use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::spawn_local;
 
-use yew::{prelude::*, virtual_dom::VNode};
+use yew::prelude::*;
 use yew_router::prelude::*;
 
 use serde::{Deserialize, Serialize};
@@ -52,10 +53,15 @@ const FILLED_STAR_NAMES: &[&str] = &[
 fn switch(routes: Route) -> Html {
     match routes {
         Route::Home => {
+            SessionStorage::delete("opened");
+
             let get_new_posts: Callback<MouseEvent> = Callback::from(move |_| {
                 let posts_element = get_document().get_element_by_id("posts").unwrap();
 
                 let stars = get_document().get_elements_by_class_name("star");
+
+                let should_censor = LocalStorage::get::<String>("censor").is_err();
+                log::debug!("censor? {should_censor:?}");
 
                 spawn_local(async move {
                     let posts: Vec<Post> =
@@ -74,10 +80,16 @@ fn switch(routes: Route) -> Html {
                                 Some(comments) => comments
                                     .iter()
                                     .map(|comment| {
+                                        let content = if should_censor {
+                                            comment.content.censor()
+                                        } else {
+                                            comment.content.clone()
+                                        };
+
                                         format!(r#"<div id={}>{}: {}</div>"#,
                                             comment.id.to_string(),
                                             &comment.username,
-                                            &comment.content.censor(),
+                                            content,
                                         )
                                     })
                                     .collect::<Vec<String>>()
@@ -92,6 +104,12 @@ fn switch(routes: Route) -> Html {
                                 DateTime::<Local>::from(timestamp)
                                     .format("%d/%m/%Y %H:%M")
                                     .to_string();
+                            
+                            let content = if should_censor {
+                                post.content.censor()
+                            } else {
+                                post.content.clone()
+                            };
 
                             format!(
                                 r#"
@@ -110,7 +128,7 @@ fn switch(routes: Route) -> Html {
                                 </div>"#,
                                 post.id.to_string(),
                                 &post.username,
-                                &post.content.censor(),
+                                content,
                                 post.id,
                                 "close"
                             )
@@ -138,9 +156,22 @@ fn switch(routes: Route) -> Html {
                 });
             });
 
+            let save_options: Callback<MouseEvent> = Callback::from(move |_| {
+                let ok = get_document()
+                    .get_element_by_id("uncensor")
+                    .unwrap()
+                    .unchecked_into::<web_sys::HtmlInputElement>();
+
+                if ok.checked() {
+                    LocalStorage::set("censor", "yes").unwrap();
+                } else {
+                    LocalStorage::delete("censor");
+                }
+            });
+
             let log_in: Callback<MouseEvent> = Callback::from(move |_| {
-                let username = get_textarea("inputUsername");
-                let password = get_textarea("inputPassword");
+                let username = get_input("inputUsername");
+                let password = get_input("inputPassword");
 
                 spawn_local(async {
                     match post_api_json::<Option<String>, _>("/api/login", &User::new(username, password)).await {
@@ -155,8 +186,8 @@ fn switch(routes: Route) -> Html {
             });
 
             let create_account: Callback<MouseEvent> = Callback::from(move |_| {
-                let username = get_textarea("inputUsername");
-                let password = get_textarea("inputPassword");
+                let username = get_input("inputUsername");
+                let password = get_input("inputPassword");
 
                 spawn_local(async {
                     match post_api_json::<Option<String>, _>("/api/create_account", &User::new(username, password)).await {
@@ -170,11 +201,46 @@ fn switch(routes: Route) -> Html {
                 });
             });
 
+            let create_post: Callback<MouseEvent> = Callback::from(move |_| {
+                let content: String = get_input("post_content");
+                let session: String = LocalStorage::get("session").unwrap();
+
+                spawn_local(async move {
+                    let resp = Request::post("/api/submit_post")
+                        .header("authorization", &session)
+                        .body(content)
+                        .unwrap()
+                        .send()
+                        .await;
+
+                    match resp {
+                        Ok(resp) => if resp.ok() {
+                            set_text("b", &format!("ok! {}", resp.text().await.unwrap()));
+                        } else {
+                            set_text("b", &format!("server error: {}", resp.text().await.unwrap()));
+                        },
+                        Err(err) => set_text("b", &format!("request error: {err}")),
+                    }
+                });
+            });
+
             html! {
                 <>
 
-                <div class="row vw-100 vh-100">
-                    <div class="col"/>
+                <div class="row vw-100 vh-100 align-items-center">
+                    <div class="col">
+                        <div class="border rounded p-2">
+                            <div class="mb-3">
+                                <label for="inputContent" class="form-label">{ "What's on your mind?" }</label>
+                                <input type="text" placeholder="Type here" class="form-control" aria-describedby="inputInfo" required=true/>
+                                
+                                <div class="invalid-feedback">{"Please write something."}</div>
+
+                                <div id="inputInfo" class="form-text">{ "Be mindful of what you post!" }</div>
+                            </div>
+                            <button onclick={create_post} class="btn btn-primary">{"Submit post"}</button>
+                        </div>
+                    </div>
                     <div class="col">
                         <img src="/assets/tree.jpg" class="vh-100 mx-auto d-block" alt="A banyan tree."/>
                     </div>
@@ -184,15 +250,22 @@ fn switch(routes: Route) -> Html {
                         <div class="border rounded p-2 mb-2">
                             <div class="mb-3">
                                 <label for="inputUsername" class="form-label">{ "Username" }</label>
-                                <input type="text" placeholder="Type here" class="form-control" id="inputUsername" aria-describedby="usernameInfo"/>
+                                <input type="text" placeholder="Type here" class="form-control" id="inputUsername" aria-describedby="usernameInfo" required=true/>
+
+                                <div class="valid-feedback">{"Looks good!"}</div>
+                                <div class="invalid-feedback">{"Please choose a username."}</div>
+
                                 <div id="usernameInfo" class="form-text">{ "Usernames are unique!" }</div>
                             </div>
                             <div class="mb-3">
                                 <label for="inputPassword" class="form-label">{ "Password" }</label>
-                                <input class="form-control" id="inputPassword" placeholder="Type here"/>
+                                <input class="form-control" id="inputPassword" placeholder="Type here" required=true/>
+                                
+                                <div class="valid-feedback">{"Looks good!"}</div>
+                                <div class="invalid-feedback">{"Please choose a password."}</div>
                             </div>
                             <button onclick={log_in} class="btn btn-primary">{ "Log in!" }</button>
-                            <button onclick={create_account} class="btn btn-primary ms-2">{ "Create account!" }</button>
+                            <button onclick={create_account} class="btn btn-primary ms-3">{ "Create account!" }</button>
                         </div>
 
                         <div class="border rounded p-2">
@@ -316,7 +389,7 @@ where
     resp
 }
 
-async fn get_api_json_bearing<T>(path: &str, auth: &str) -> Result<T, String>
+async fn _get_api_json_bearing<T>(path: &str, auth: &str) -> Result<T, String>
 where
     T: for<'a> Deserialize<'a>,
 {
