@@ -8,7 +8,7 @@ use rustrict::CensorStr;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::spawn_local;
 
-use web_sys::HtmlInputElement;
+use web_sys::{HtmlInputElement, Document};
 use yew::prelude::*;
 use yew_router::prelude::*;
 
@@ -51,6 +51,119 @@ const FILLED_STAR_NAMES: &[&str] = &[
     "/assets/star-filled-10.png",
 ];
 
+async fn render_posts(document: Document) {
+    let posts_element =
+        document.get_element_by_id("posts").unwrap();
+    let stars = document.get_elements_by_class_name("star");
+
+    let should_censor =
+        LocalStorage::get::<bool>("censor").is_err();
+    log::debug!("censor? {should_censor:?}");
+
+    // fetch posts on load
+    spawn_local(async move {
+        let posts: Vec<Post> =
+            match get_api_json::<Option<Vec<Post>>>(
+                "/api/get_posts",
+            )
+            .await
+            {
+                Ok(Some(post)) => post,
+                _ => panic!(),
+            };
+
+        let num_posts = posts.len();
+        log::info!("got {num_posts} posts");
+
+        let posts: String = posts
+            .iter()
+            .map(|post| {
+                let mut comments = match post.comments.as_ref() {
+                    Some(comments) => comments
+                        .iter()
+                        .map(|comment| {
+                            let content = if should_censor {
+                                comment.content.censor()
+                            } else {
+                                comment.content.clone()
+                            };
+
+                            format!(r#"<div class="" id=comment-{}>{}: {}</div>"#,
+                                comment.id,
+                                &comment.username,
+                                content,
+                            )
+                        })
+                        .collect::<Vec<String>>()
+                        .concat(),
+                    None => String::new(),
+                };
+
+                comments.push_str(&format!(r#"
+                    <div class="d-flex flex-row">
+                        <input type="text" id="comment-on-{}" class="flex-grow-1" placeholder="Post a comment"/>
+                        <a href="">post</a>
+                    </div>"#,
+                    post.id
+                ));
+
+                let timestamp: DateTime<Utc> = DateTime::from_timestamp(post.created, 0).unwrap();
+                let timestamp: String =
+                    DateTime::<Local>::from(timestamp)
+                        .format("%d/%m/%Y %H:%M")
+                        .to_string();
+
+                let content = if should_censor {
+                    post.content.censor()
+                } else {
+                    post.content.clone()
+                };
+
+                format!(
+                    r#"
+                    <div class="border border-2 rounded border-primary-subtle position-absolute top-50 bg-dark col-3 p-2 px-10" id="post-{}" style="visibility: hidden;">
+                        <div class="d-flex flex-row">
+                            <p class="flex-grow-1">{} said:</p>
+                            <p>{timestamp}</p>
+                        </div>
+
+                        <div class="d-flex flex-row">
+                            <p class="flex-grow-1">{}</p>
+                            <a class="mb-3" href="javascript:hide('post-{}')">{}</a>
+                        </div>
+
+                        <div class="fst-italic text-wrap border-top pt-3 fs-6">{comments}</div>
+                    </div>"#,
+                    post.id,
+                    &post.username,
+                    content,
+                    post.id,
+                    "close"
+                )
+            })
+            .collect::<Vec<String>>()
+            .join("\n");
+
+        posts_element.set_inner_html(&posts);
+
+        for i in 0..10 {
+            if i + 1 > num_posts {
+                stars
+                    .get_with_index(u32::try_from(i).unwrap())
+                    .unwrap()
+                    .set_attribute("src", EMPTY_STAR_NAMES[i])
+                    .unwrap();
+                continue;
+            }
+            stars
+                .get_with_index(u32::try_from(i).unwrap())
+                .unwrap()
+                .set_attribute("src", FILLED_STAR_NAMES[i])
+                .unwrap();
+        }
+    });
+}
+
 #[allow(clippy::needless_pass_by_value, clippy::too_many_lines)]
 fn switch(routes: Route) -> Html {
     match routes {
@@ -60,6 +173,7 @@ fn switch(routes: Route) -> Html {
             // wait for elements to be loaded, then fetch posts and set settings state
             spawn_local(async {
                 loop {
+                    log::debug!("waiting");
                     if let Some(window) = web_sys::window() {
                         if let Some(document) = window.document() {
                             if let Some(check) = document.get_element_by_id("uncensor") {
@@ -99,119 +213,9 @@ fn switch(routes: Route) -> Html {
                                     }
 
                                     // fetch posts
-                                    {
-                                        let posts_element =
-                                            document.get_element_by_id("posts").unwrap();
-                                        let stars = document.get_elements_by_class_name("star");
+                                    render_posts(document).await;
 
-                                        let should_censor =
-                                            LocalStorage::get::<bool>("censor").is_err();
-                                        log::debug!("censor? {should_censor:?}");
-
-                                        // fetch posts on load
-                                        spawn_local(async move {
-                                            let posts: Vec<Post> =
-                                                match get_api_json::<Option<Vec<Post>>>(
-                                                    "/api/get_posts",
-                                                )
-                                                .await
-                                                {
-                                                    Ok(Some(post)) => post,
-                                                    _ => panic!(),
-                                                };
-
-                                            let num_posts = posts.len();
-                                            log::info!("got {num_posts} posts");
-
-                                            let posts: String = posts
-                                                .iter()
-                                                .map(|post| {
-                                                    let mut comments = match post.comments.as_ref() {
-                                                        Some(comments) => comments
-                                                            .iter()
-                                                            .map(|comment| {
-                                                                let content = if should_censor {
-                                                                    comment.content.censor()
-                                                                } else {
-                                                                    comment.content.clone()
-                                                                };
-
-                                                                format!(r#"<div class="" id=comment-{}>{}: {}</div>"#,
-                                                                    comment.id,
-                                                                    &comment.username,
-                                                                    content,
-                                                                )
-                                                            })
-                                                            .collect::<Vec<String>>()
-                                                            .join("\n"),
-                                                        None => String::new(),
-                                                    };
-
-                                                    comments.push_str(&format!(r#"
-                                                        <div class="d-flex flex-row">
-                                                            <input type="text" id="comment-on-{}" class="flex-grow-1" placeholder="Post a comment"/>
-                                                            <a href="">post</a>
-                                                        </div>"#,
-                                                        post.id
-                                                    ));
-
-                                                    let timestamp: DateTime<Utc> = DateTime::from_timestamp(post.created, 0).unwrap();
-                                                    let timestamp: String =
-                                                        DateTime::<Local>::from(timestamp)
-                                                            .format("%d/%m/%Y %H:%M")
-                                                            .to_string();
-
-                                                    let content = if should_censor {
-                                                        post.content.censor()
-                                                    } else {
-                                                        post.content.clone()
-                                                    };
-
-                                                    format!(
-                                                        r#"
-                                                        <div class="border border-2 rounded border-primary-subtle position-absolute top-50 bg-dark col-3 p-2 px-10" id="post-{}" style="visibility: hidden;">
-                                                            <div class="d-flex flex-row">
-                                                                <p class="flex-grow-1">{} said:</p>
-                                                                <p>{timestamp}</p>
-                                                            </div>
-                        
-                                                            <div class="d-flex flex-row">
-                                                                <p class="flex-grow-1">{}</p>
-                                                                <a class="mb-3" href="javascript:hide('post-{}')">{}</a>
-                                                            </div>
-                        
-                                                            <div class="fst-italic text-wrap border-top pt-3 fs-6">{comments}</div>
-                                                        </div>"#,
-                                                        post.id,
-                                                        &post.username,
-                                                        content,
-                                                        post.id,
-                                                        "close"
-                                                    )
-                                                })
-                                                .collect::<Vec<String>>()
-                                                .join("\n");
-
-                                            posts_element.set_inner_html(&posts);
-
-                                            for i in 0..10 {
-                                                if i + 1 > num_posts {
-                                                    stars
-                                                        .get_with_index(u32::try_from(i).unwrap())
-                                                        .unwrap()
-                                                        .set_attribute("src", EMPTY_STAR_NAMES[i])
-                                                        .unwrap();
-                                                    continue;
-                                                }
-                                                stars
-                                                    .get_with_index(u32::try_from(i).unwrap())
-                                                    .unwrap()
-                                                    .set_attribute("src", FILLED_STAR_NAMES[i])
-                                                    .unwrap();
-                                            }
-                                        });
-                                        break;
-                                    }
+                                    break;
                                 }
                             }
                         }
@@ -222,103 +226,8 @@ fn switch(routes: Route) -> Html {
             });
 
             let get_new_posts: Callback<MouseEvent> = Callback::from(move |_| {
-                let posts_element = get_document().get_element_by_id("posts").unwrap();
-
-                let stars = get_document().get_elements_by_class_name("star");
-
-                let should_censor = LocalStorage::get::<bool>("censor").is_err();
-                log::debug!("censor? {should_censor:?}");
-
-                spawn_local(async move {
-                    let posts: Vec<Post> =
-                        match get_api_json::<Option<Vec<Post>>>("/api/get_posts").await {
-                            Ok(Some(post)) => post,
-                            _ => panic!(),
-                        };
-
-                    let num_posts = posts.len();
-                    log::info!("got {num_posts} posts");
-
-                    let posts: String = posts
-                        .iter()
-                        .map(|post| {
-                            let mut comments = match post.comments.as_ref() {
-                                Some(comments) => comments
-                                    .iter()
-                                    .map(|comment| {
-                                        let content = if should_censor {
-                                            comment.content.censor()
-                                        } else {
-                                            comment.content.clone()
-                                        };
-
-                                        format!(r#"<div id={}>{}: {}</div>"#,
-                                            comment.id,
-                                            &comment.username,
-                                            content,
-                                        )
-                                    })
-                                    .collect::<Vec<String>>()
-                                    .join("\n"),
-                                None => String::new(),
-                            };
-
-                            comments.push_str("\n");
-
-                            let timestamp: DateTime<Utc> = DateTime::from_timestamp(post.created, 0).unwrap();
-                            let timestamp: String =
-                                DateTime::<Local>::from(timestamp)
-                                    .format("%d/%m/%Y %H:%M")
-                                    .to_string();
-
-                            let content = if should_censor {
-                                post.content.censor()
-                            } else {
-                                post.content.clone()
-                            };
-
-                            format!(
-                                r#"
-                                <div class="border border-2 rounded border-primary-subtle position-absolute top-50 bg-dark col-3 p-2 px-10" id="post-{}" style="visibility: hidden;">
-                                    <div class="d-flex flex-row">
-                                        <p class="flex-grow-1">{} said:</p>
-                                        <p>{timestamp}</p>
-                                    </div>
-
-                                    <div class="d-flex flex-row">
-                                        <p class="flex-grow-1">{}</p>
-                                        <a class="mb-3" href="javascript:hide('post-{}')">{}</a>
-                                    </div>
-
-                                    <div class="fst-italic text-wrap border-top pt-3 fs-6">{comments}</div>
-                                </div>"#,
-                                post.id,
-                                &post.username,
-                                content,
-                                post.id,
-                                "close"
-                            )
-                        })
-                        .collect::<Vec<String>>()
-                        .join("\n");
-
-                    posts_element.set_inner_html(&posts);
-
-                    for i in 0..10 {
-                        if i + 1 > num_posts {
-                            stars
-                                .get_with_index(u32::try_from(i).unwrap())
-                                .unwrap()
-                                .set_attribute("src", EMPTY_STAR_NAMES[i])
-                                .unwrap();
-                            continue;
-                        }
-                        stars
-                            .get_with_index(u32::try_from(i).unwrap())
-                            .unwrap()
-                            .set_attribute("src", FILLED_STAR_NAMES[i])
-                            .unwrap();
-                    }
+                spawn_local(async {
+                    render_posts(get_document()).await;
                 });
             });
 
@@ -453,6 +362,7 @@ fn switch(routes: Route) -> Html {
                     match resp {
                         Ok(resp) => {
                             if resp.ok() {
+                                render_posts(get_document()).await;
                                 set_text("b", format!("ok! {}", resp.text().await.unwrap()));
                             } else {
                                 set_text(
