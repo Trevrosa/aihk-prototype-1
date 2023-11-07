@@ -21,10 +21,10 @@ pub struct User {
 
 impl User {
     #[must_use]
-    pub fn new(username: String, password: String) -> Self {
+    pub fn new(username: &str, password: &str) -> Self {
         Self {
-            username,
-            password,
+            username: username.to_string(),
+            password: password.to_string(),
             created: Utc::now().timestamp(),
         }
     }

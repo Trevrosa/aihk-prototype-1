@@ -28,8 +28,15 @@ pub async fn route(
     }
 
     let analysis = Censor::from_str(&input).analyze();
-    if analysis.is(Type::SEVERE | Type::SEXUAL) {
+    if analysis.is((Type::SEVERE & Type::SEXUAL) | Type::OFFENSIVE) {
         return (StatusCode::FORBIDDEN, "Cannot say that".to_string());
+    }
+
+    if input.trim().is_empty() {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Cannot be empty".to_string(),
+        );
     }
 
     let username: String = session.unwrap().username;
@@ -84,7 +91,7 @@ fn get_advice(input: &str) -> String {
         let chat: &PyAny = py.import("g4f").unwrap().getattr("ChatCompletion").unwrap();
 
         let prompt: String = format!(
-            r#"Depending on this message "{input}", what advice would you give this person? Keep your advice under 4 sentences. Only respond with the advice."#
+            r#"Depending on this message "{input}", what advice would you give this person? Keep your advice under 4 sentences, but try to respond in depth. Only respond with the advice."#
         );
 
         let prompt: &PyDict = create_message(py, &prompt);

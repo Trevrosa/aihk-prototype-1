@@ -47,7 +47,7 @@ pub async fn store_comment(
 }
 
 pub async fn get_last_id(table: &str, db_pool: &Pool<Sqlite>) -> u32 {
-    sqlx::query(&format!("SELECT id FROM {table} ORDER BY id DESC LIMIT 1"))
+    sqlx::query(&format!("SELECT id FROM {table} ORDER BY id DESC"))
         .fetch_one(db_pool)
         .await
         .map_or(0, |row| row.get::<u32, usize>(0))

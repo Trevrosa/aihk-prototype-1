@@ -8,13 +8,13 @@ use rustrict::CensorStr;
 use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::spawn_local;
 
-use web_sys::{HtmlInputElement, Document};
+use web_sys::{Document, HtmlInputElement};
 use yew::prelude::*;
 use yew_router::prelude::*;
 
 use serde::Deserialize;
 
-use common::{Post, User};
+use common::{inputs::InputComment, Post, User};
 
 #[derive(Clone, Routable, PartialEq)]
 enum Route {
@@ -51,25 +51,20 @@ const FILLED_STAR_NAMES: &[&str] = &[
     "/assets/star-filled-10.png",
 ];
 
-async fn render_posts(document: Document) {
-    let posts_element =
-        document.get_element_by_id("posts").unwrap();
+fn render_posts(document: &Document) {
+    let posts_element = document.get_element_by_id("posts").unwrap();
     let stars = document.get_elements_by_class_name("star");
 
-    let should_censor =
-        LocalStorage::get::<bool>("censor").is_err();
-    log::debug!("censor? {should_censor:?}");
+    let should_censor = LocalStorage::get::<bool>("censor").is_err();
 
     // fetch posts on load
     spawn_local(async move {
         let posts: Vec<Post> =
-            match get_api_json::<Option<Vec<Post>>>(
-                "/api/get_posts",
-            )
-            .await
-            {
-                Ok(Some(post)) => post,
-                _ => panic!(),
+            if let Ok(Some(post)) = get_api_json::<Option<Vec<Post>>>("/api/get_posts").await {
+                post
+            } else {
+                log::info!("got no posts");
+                return;
             };
 
         let num_posts = posts.len();
@@ -78,7 +73,7 @@ async fn render_posts(document: Document) {
         let posts: String = posts
             .iter()
             .map(|post| {
-                let mut comments = match post.comments.as_ref() {
+                let comments = match post.comments.as_ref() {
                     Some(comments) => comments
                         .iter()
                         .map(|comment| {
@@ -88,7 +83,7 @@ async fn render_posts(document: Document) {
                                 comment.content.clone()
                             };
 
-                            format!(r#"<div class="" id=comment-{}>{}: {}</div>"#,
+                            format!(r#"<div class="pb-2" id=comment-{}>{}: {}</div>"#,
                                 comment.id,
                                 &comment.username,
                                 content,
@@ -98,14 +93,6 @@ async fn render_posts(document: Document) {
                         .concat(),
                     None => String::new(),
                 };
-
-                comments.push_str(&format!(r#"
-                    <div class="d-flex flex-row">
-                        <input type="text" id="comment-on-{}" class="flex-grow-1" placeholder="Post a comment"/>
-                        <a href="">post</a>
-                    </div>"#,
-                    post.id
-                ));
 
                 let timestamp: DateTime<Utc> = DateTime::from_timestamp(post.created, 0).unwrap();
                 let timestamp: String =
@@ -121,7 +108,7 @@ async fn render_posts(document: Document) {
 
                 format!(
                     r#"
-                    <div class="border border-2 rounded border-primary-subtle position-absolute top-50 bg-dark col-3 p-2 px-10" id="post-{}" style="visibility: hidden;">
+                    <div class="border border-2 rounded border-primary-subtle position-absolute top-50 bg-dark col-4 p-2 px-10" id="post-{}" style="visibility: hidden;">
                         <div class="d-flex flex-row">
                             <p class="flex-grow-1">{} said:</p>
                             <p>{timestamp}</p>
@@ -142,7 +129,7 @@ async fn render_posts(document: Document) {
                 )
             })
             .collect::<Vec<String>>()
-            .join("\n");
+            .concat();
 
         posts_element.set_inner_html(&posts);
 
@@ -164,6 +151,20 @@ async fn render_posts(document: Document) {
     });
 }
 
+async fn render_login_status() {
+    if let Ok(session) = gloo_storage::LocalStorage::get::<String>("session") {
+        if let Ok(Some(username)) =
+            get_api_json_bearing::<Option<String>>("/api/validate_session", &session).await
+        {
+            set_text("login-status", format!("signed in as {username}"));
+        } else {
+            set_text_str("login-status", "session invalid, log in again");
+        }
+    } else {
+        set_text_str("login-status", "not signed in");
+    }
+}
+
 #[allow(clippy::needless_pass_by_value, clippy::too_many_lines)]
 fn switch(routes: Route) -> Html {
     match routes {
@@ -173,47 +174,20 @@ fn switch(routes: Route) -> Html {
             // wait for elements to be loaded, then fetch posts and set settings state
             spawn_local(async {
                 loop {
-                    log::debug!("waiting");
                     if let Some(window) = web_sys::window() {
                         if let Some(document) = window.document() {
                             if let Some(check) = document.get_element_by_id("uncensor") {
                                 if let Ok(check) = check.dyn_into::<HtmlInputElement>() {
                                     // change setting states
-                                    {
-                                        if LocalStorage::get::<bool>("censor").is_ok() {
-                                            check.set_checked(true);
-                                        }
+                                    if LocalStorage::get::<bool>("censor").is_ok() {
+                                        check.set_checked(true);
                                     }
 
                                     // change login status
-                                    {
-                                        if let Ok(session) =
-                                            gloo_storage::LocalStorage::get::<String>("session")
-                                        {
-                                            if let Ok(Some(username)) =
-                                                get_api_json_bearing::<Option<String>>(
-                                                    "/api/validate_session",
-                                                    &session,
-                                                )
-                                                .await
-                                            {
-                                                set_text(
-                                                    "login-status",
-                                                    format!("signed in as {username}"),
-                                                );
-                                            } else {
-                                                set_text_str(
-                                                    "login-status",
-                                                    "session invalid, log in again",
-                                                );
-                                            }
-                                        } else {
-                                            set_text_str("login-status", "not signed in");
-                                        }
-                                    }
+                                    render_login_status().await;
 
                                     // fetch posts
-                                    render_posts(document).await;
+                                    render_posts(&document);
 
                                     break;
                                 }
@@ -226,9 +200,7 @@ fn switch(routes: Route) -> Html {
             });
 
             let get_new_posts: Callback<MouseEvent> = Callback::from(move |_| {
-                spawn_local(async {
-                    render_posts(get_document()).await;
-                });
+                render_posts(&get_document());
             });
 
             let save_options: Callback<MouseEvent> = Callback::from(move |_| {
@@ -242,6 +214,8 @@ fn switch(routes: Route) -> Html {
                 } else {
                     LocalStorage::delete("censor");
                 }
+
+                render_posts(&get_document());
             });
 
             let log_in: Callback<MouseEvent> = Callback::from(move |_| {
@@ -253,9 +227,11 @@ fn switch(routes: Route) -> Html {
                     return;
                 }
 
-                spawn_local(async {
+                set_text_str("a", "working...");
+
+                spawn_local(async move {
                     let resp = Request::post("/api/login")
-                        .json(&User::new(username, password))
+                        .json(&User::new(&username, &password))
                         .unwrap()
                         .send()
                         .await;
@@ -266,6 +242,8 @@ fn switch(routes: Route) -> Html {
                                 if let Ok(Some(session)) = resp.json::<Option<String>>().await {
                                     LocalStorage::set("session", session).unwrap();
                                     set_text_str("a", "logged in!");
+
+                                    set_text("login-status", format!("signed in as {username}"));
                                 } else {
                                     set_text_str("a", "no session fetched");
                                 }
@@ -294,9 +272,11 @@ fn switch(routes: Route) -> Html {
                     return;
                 }
 
-                spawn_local(async {
+                set_text_str("a", "working...");
+
+                spawn_local(async move {
                     let resp = Request::post("/api/create_account")
-                        .json(&User::new(username, password))
+                        .json(&User::new(&username, &password))
                         .unwrap()
                         .send()
                         .await;
@@ -338,13 +318,16 @@ fn switch(routes: Route) -> Html {
 
             let create_post: Callback<MouseEvent> = Callback::from(move |_| {
                 let content: String = get_input("post_content");
-                let session: String = format!("Bearer {}", match LocalStorage::get::<String>("session") {
-                    Ok(session) => session,
-                    Err(_) => {
+                let session: String = format!(
+                    "Bearer {}",
+                    if let Ok(session) = LocalStorage::get::<String>("session") {
+                        set_text_str("b", "working...");
+                        session
+                    } else {
                         set_text_str("b", "not logged in");
                         return;
-                    },
-                });
+                    }
+                );
 
                 if content.trim().is_empty() {
                     set_text_str("b", "cannot be empty");
@@ -362,8 +345,10 @@ fn switch(routes: Route) -> Html {
                     match resp {
                         Ok(resp) => {
                             if resp.ok() {
-                                render_posts(get_document()).await;
-                                set_text("b", format!("ok! {}", resp.text().await.unwrap()));
+                                render_posts(&get_document());
+                                set_text_str("b", "ok!");
+                            } else if resp.status() == 403 {
+                                set_text_str("b", "please use more appropriate language.");
                             } else {
                                 set_text(
                                     "b",
@@ -376,6 +361,62 @@ fn switch(routes: Route) -> Html {
                 });
             });
 
+            let post_comment: Callback<MouseEvent> = Callback::from(move |_| {
+                let content: String = get_input("comment_input");
+                let post_id = get_input("comment_id").parse::<u32>();
+                let Ok(post_id) = post_id else {
+                    set_text_str("c", "no post # selected");
+                    return;
+                };
+
+                if content.trim().is_empty() {
+                    set_text_str("c", "cannot be empty");
+                    return;
+                }
+
+                let payload = InputComment { post_id, content };
+
+                let session: String = format!(
+                    "Bearer {}",
+                    if let Ok(session) = LocalStorage::get::<String>("session") {
+                        set_text_str("c", "working...");
+                        session
+                    } else {
+                        set_text_str("c", "not logged in");
+                        return;
+                    }
+                );
+
+                spawn_local(async move {
+                    let resp = Request::post("/api/add_comment")
+                        .header("authorization", &session)
+                        .json(&payload)
+                        .unwrap()
+                        .send()
+                        .await;
+
+                    match resp {
+                        Ok(resp) => {
+                            if resp.ok() {
+                                set_text_str("c", "ok!");
+                                render_posts(&get_document());
+                                SessionStorage::delete("opened");
+                            } else if resp.status() == 403 {
+                                set_text_str("c", "please use more appropriate language.");
+                            } else if resp.status() == 404 {
+                                set_text("c", format!("post {post_id} does not exist."));
+                            } else {
+                                set_text(
+                                    "c",
+                                    format!("server error: {}", resp.text().await.unwrap()),
+                                );
+                            }
+                        }
+                        Err(err) => set_text("c", format!("request error: {err:?}")),
+                    };
+                });
+            });
+
             html! {
                 <>
 
@@ -383,22 +424,75 @@ fn switch(routes: Route) -> Html {
                     <div class="col">
                         <h1 class="mb-3 text-center">{ "Post something" }</h1>
 
-                        <div class="border rounded p-2">
-                            <div class="mb-3">
-                                <label for="inputContent" class="form-label">{ "What's on your mind?" }</label>
-                                <input type="text" id="post_content" placeholder="Type here" class="form-control" aria-describedby="inputInfo" required=true/>
+                        <div class="border rounded p-2 mb-3">
+                            <p>{ "What's on your mind?" }</p>
+                            <input type="text" id="post_content" placeholder="Type here" class="form-control" aria-describedby="inputInfo"/>
 
-                                <div class="invalid-feedback">{"Please write something."}</div>
+                            <div id="inputInfo" class="form-text">{ "Be mindful of what you post!" }</div>
 
-                                <div id="inputInfo" class="form-text">{ "Be mindful of what you post!" }</div>
-                            </div>
-                            <button onclick={create_post} class="btn btn-primary">{"Submit post"}</button>
+                            <button onclick={create_post} class="btn btn-primary mt-2">{"Submit post"}</button>
                             <p id="b"/>
+                        </div>
+
+                        <div class="border rounded p-2 mb-3">
+                            <p>{ "Add a comment!" }</p>
+
+                            <input type="number" min="0" id="comment_id" placeholder="Post #" class="form-control"/>
+
+                            <input type="text" id="comment_input" placeholder="Type here" class="form-control" aria-describedby="commentInfo"/>
+
+                            <div id="commentInfo" class="form-text">{ "Be mindful of what you comment!" }</div>
+
+                            <button onclick={post_comment} class="btn btn-primary mt-2">{"Submit comment"}</button>
+                            <p id="c"/>
                         </div>
                     </div>
 
-                    <div class="col">
+                    <div class="col" style="position: relative; display: display: inline;">
                         <img src="/assets/tree.jpg" class="vh-100 mx-auto d-block" alt="A banyan tree."/>
+                        <a href="#">
+                            <img onclick={get_new_posts} src="/assets/reload.png" style="position: absolute; top: -11%; right: -15%; transform: scale(0.28);" alt="Reload button."/>
+                        </a>
+
+                        <a href="javascript:show(\"post-1\");">
+                            <img src="/assets/star-empty-1.png" class="star" style="position: absolute; top: 38.6%; left: 70%; transform: scale(0.55);" alt="A post in the form of a star."/>
+                        </a>
+
+                        <a href="javascript:show(\"post-2\");">
+                            <img src="/assets/star-empty-2.png" class="star" style="position: absolute; top: 42.7%; left: 53%; transform: scale(0.55);" alt="A post in the form of a star."/>
+                        </a>
+
+                        <a href="javascript:show(\"post-3\");">
+                            <img src="/assets/star-empty-3.png" class="star" style="position: absolute; top: 30%; left: 46%; transform: scale(0.55);" alt="A post in the form of a star."/>
+                        </a>
+
+                        <a href="javascript:show(\"post-4\");">
+                            <img src="/assets/star-empty-4.png" class="star" style="position: absolute; top: 14%; left: 36.5%; transform: scale(0.55);" alt="A post in the form of a star."/>
+                        </a>
+
+                        <a href="javascript:show(\"post-5\");">
+                            <img src="/assets/star-empty-5.png" class="star" style="position: absolute; top: 26%; left: 59%; transform: scale(0.55);" alt="A post in the form of a star."/>
+                        </a>
+
+                        <a href="javascript:show(\"post-6\");">
+                            <img src="/assets/star-empty-6.png" class="star" style="position: absolute; top: 18%; left: 23.5%; transform: scale(0.55);" alt="A post in the form of a star."/>
+                        </a>
+
+                        <a href="javascript:show(\"post-7\");">
+                            <img src="/assets/star-empty-7.png" class="star" style="position: absolute; top: 44%; left: 11%; transform: scale(0.55);" alt="A post in the form of a star."/>
+                        </a>
+
+                        <a href="javascript:show(\"post-8\");">
+                            <img src="/assets/star-empty-8.png" class="star" style="position: absolute; top: 34%; left: 15%; transform: scale(0.55);" alt="A post in the form of a star."/>
+                        </a>
+
+                        <a href="javascript:show(\"post-9\");">
+                            <img src="/assets/star-empty-9.png" class="star" style="position: absolute; top: 28%; left: 29%; transform: scale(0.55);" alt="A post in the form of a star."/>
+                        </a>
+
+                        <a href="javascript:show(\"post-10\");">
+                            <img src="/assets/star-empty-10.png" class="star" style="position: absolute; top: 43.3%; left: 28%; transform: scale(0.55);" alt="A post in the form of a star."/>
+                        </a>
                     </div>
 
                     <div class="col">
@@ -412,19 +506,13 @@ fn switch(routes: Route) -> Html {
                         <div class="border rounded p-2 mb-2">
                             <div class="mb-3">
                                 <label for="inputUsername" class="form-label">{ "Username" }</label>
-                                <input type="text" placeholder="Type here" class="form-control" id="inputUsername" aria-describedby="usernameInfo" required=true/>
-
-                                <div class="valid-feedback">{"Looks good!"}</div>
-                                <div class="invalid-feedback">{"Please choose a username."}</div>
+                                <input type="text" placeholder="Type here" class="form-control" id="inputUsername" aria-describedby="usernameInfo"/>
 
                                 <div id="usernameInfo" class="form-text">{ "Usernames are unique!" }</div>
                             </div>
                             <div class="mb-3">
                                 <label for="inputPassword" class="form-label">{ "Password" }</label>
-                                <input class="form-control" id="inputPassword" placeholder="Type here" required=true/>
-
-                                <div class="valid-feedback">{"Looks good!"}</div>
-                                <div class="invalid-feedback">{"Please choose a password."}</div>
+                                <input class="form-control" id="inputPassword" placeholder="Type here"/>
                             </div>
 
                             <button onclick={log_in} class="btn btn-primary">{ "Log in!" }</button>
@@ -444,50 +532,6 @@ fn switch(routes: Route) -> Html {
                         </div>
                     </div>
                 </div>
-
-                <a href="#">
-                    <img onclick={get_new_posts} src="/assets/reload.png" style="position: absolute; top: -10%; right: 23%; transform: scale(0.28);" alt="Reload button."/>
-                </a>
-
-                <a href="javascript:show(\"post-1\");">
-                    <img src="/assets/star-empty-1.png" class="star" style="position: absolute; top: 39.6%; left: 57%; transform: scale(0.55);" alt="A post in the form of a star."/>
-                </a>
-
-                <a href="javascript:show(\"post-2\");">
-                    <img src="/assets/star-empty-2.png" class="star" style="position: absolute; top: 42.7%; left: 50%; transform: scale(0.55);" alt="A post in the form of a star."/>
-                </a>
-
-                <a href="javascript:show(\"post-3\");">
-                    <img src="/assets/star-empty-3.png" class="star" style="position: absolute; top: 30%; left: 46%; transform: scale(0.55);" alt="A post in the form of a star."/>
-                </a>
-
-                <a href="javascript:show(\"post-4\");">
-                    <img src="/assets/star-empty-4.png" class="star" style="position: absolute; top: 14%; left: 37.9%; transform: scale(0.55);" alt="A post in the form of a star."/>
-                </a>
-
-                <a href="javascript:show(\"post-5\");">
-                    <img src="/assets/star-empty-5.png" class="star" style="position: absolute; top: 29.3%; left: 53.5%; transform: scale(0.55);" alt="A post in the form of a star."/>
-                </a>
-
-                <a href="javascript:show(\"post-6\");">
-                    <img src="/assets/star-empty-6.png" class="star" style="position: absolute; top: 15%; left: 45%; transform: scale(0.55);" alt="A post in the form of a star."/>
-                </a>
-
-                <a href="javascript:show(\"post-7\");">
-                    <img src="/assets/star-empty-7.png" class="star" style="position: absolute; top: 44.4%; left: 31.5%; transform: scale(0.55);" alt="A post in the form of a star."/>
-                </a>
-
-                <a href="javascript:show(\"post-8\");">
-                    <img src="/assets/star-empty-8.png" class="star" style="position: absolute; top: 36%; left: 34.3%; transform: scale(0.55);" alt="A post in the form of a star."/>
-                </a>
-
-                <a href="javascript:show(\"post-9\");">
-                    <img src="/assets/star-empty-9.png" class="star" style="position: absolute; top: 25%; left: 38%; transform: scale(0.55);" alt="A post in the form of a star."/>
-                </a>
-
-                <a href="javascript:show(\"post-10\");">
-                    <img src="/assets/star-empty-10.png" class="star" style="position: absolute; top: 43.3%; left: 40%; transform: scale(0.55);" alt="A post in the form of a star."/>
-                </a>
 
                 <div class="z-3 d-flex justify-content-center align-items-center" id="posts"/>
 

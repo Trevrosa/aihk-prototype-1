@@ -25,6 +25,14 @@ pub async fn route(
 ) -> (StatusCode, Json<Option<String>>) {
     tracing::debug!("recieved {:?}", input);
 
+    if input.username.trim().is_empty() {
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(None));
+    }
+
+    if input.password.trim().is_empty() {
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(None));
+    }
+
     let salt: SaltString = SaltString::generate(&mut OsRng);
     let hashed_password: String = Argon2::default()
         .hash_password(input.password.as_bytes(), &salt)
@@ -33,8 +41,8 @@ pub async fn route(
 
     let new_user: DBUser = DBUser {
         created: Utc::now().timestamp(),
-        username: input.username.clone(),
-        hashed_password: hashed_password.clone(),
+        username: input.username.trim().to_owned(),
+        hashed_password: hashed_password.trim().to_owned(),
     };
 
     let res: Result<SqliteQueryResult, sqlx::Error> = store_new_user(&new_user, &db_pool).await;

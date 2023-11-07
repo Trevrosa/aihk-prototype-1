@@ -28,8 +28,24 @@ pub async fn route(
     }
 
     let analysis = Censor::from_str(&input.content).analyze();
-    if analysis.is(Type::SEVERE | Type::SEXUAL) {
+    if analysis.is(Type::SEXUAL | Type::OFFENSIVE) {
         return (StatusCode::FORBIDDEN, "Cannot say that".to_string());
+    }
+
+    if input.content.trim().is_empty() {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Cannot be empty".to_string(),
+        );
+    }
+
+    if sqlx::query("SELECT id FROM posts WHERE id = $1")
+        .bind(input.post_id)
+        .fetch_one(&db_pool)
+        .await
+        .is_err()
+    {
+        return (StatusCode::NOT_FOUND, "Post not found".to_string());
     }
 
     let username = session.unwrap().username;

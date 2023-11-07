@@ -8,3 +8,6 @@ members = [
 
 [profile.release]
 lto = true
+
+[profile.release.package.frontend]
+opt-level = 's'
