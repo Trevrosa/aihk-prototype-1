@@ -119,13 +119,14 @@ fn render_posts(document: &Document) {
                             <a class="mb-3" href="javascript:hide('post-{}')">{}</a>
                         </div>
 
-                        <div class="fst-italic text-wrap border-top pt-3 fs-6">{comments}</div>
+                        <div class="fst-italic text-wrap border-top pt-3 fs-6" id="comments-{}">{comments}</div>
                     </div>"#,
                     post.id,
                     &post.username,
                     content,
                     post.id,
-                    "close"
+                    "close",
+                    post.id
                 )
             })
             .collect::<Vec<String>>()
@@ -349,6 +350,8 @@ fn switch(routes: Route) -> Html {
                             if resp.ok() {
                                 render_posts(&get_document());
                                 set_text_str("b", "ok!");
+                            } else if resp.status() == 401 {
+                                set_text_str("c", "log in again.")
                             } else if resp.status() == 403 {
                                 set_text_str("b", "please use more appropriate language.");
                             } else {
@@ -376,7 +379,7 @@ fn switch(routes: Route) -> Html {
                     return;
                 }
 
-                let payload = InputComment { post_id, content };
+                let payload = InputComment { post_id, content: content.clone() };
 
                 let session: String = format!(
                     "Bearer {}",
@@ -401,8 +404,28 @@ fn switch(routes: Route) -> Html {
                         Ok(resp) => {
                             if resp.ok() {
                                 set_text_str("c", "ok!");
-                                render_posts(&get_document());
-                                SessionStorage::delete("opened");
+
+                                let comment_box = get_document()
+                                    .get_element_by_id(&format!("comments-{post_id}"))
+                                    .unwrap();
+
+                                let should_censor = LocalStorage::get::<bool>("censor").is_err();
+
+                                let content = if should_censor {
+                                    content.censor()
+                                } else {
+                                    content.clone()
+                                };
+    
+                                let new_comment = get_document()
+                                    .create_element("div")
+                                    .unwrap();
+                                new_comment.set_class_name("pb-2");
+                                new_comment.set_text_content(Some(&format!("You: {content}")));
+
+                                comment_box.append_child(&new_comment).unwrap();
+                            } else if resp.status() == 401 {
+                                set_text_str("c", "log in again.")
                             } else if resp.status() == 403 {
                                 set_text_str("c", "please use more appropriate language.");
                             } else if resp.status() == 404 {
