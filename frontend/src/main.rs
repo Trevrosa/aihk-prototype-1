@@ -67,6 +67,9 @@ fn render_posts(document: &Document) {
                 return;
             };
 
+            
+        SessionStorage::delete("opened");
+
         let num_posts = posts.len();
         log::info!("got {num_posts} posts");
 
