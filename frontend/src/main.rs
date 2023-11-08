@@ -108,7 +108,7 @@ fn render_posts(document: &Document) {
 
                 format!(
                     r#"
-                    <div class="border border-2 rounded border-primary-subtle position-absolute top-50 bg-dark col-4 p-2 px-10" id="post-{}" style="visibility: hidden;">
+                    <div class="border border-2 rounded border-primary-subtle position-absolute text-light top-50 bg-dark col-4 p-2 px-10" id="post-{}" style="visibility: hidden;">
                         <div class="d-flex flex-row">
                             <p class="flex-grow-1">{} said:</p>
                             <p>{timestamp}</p>
