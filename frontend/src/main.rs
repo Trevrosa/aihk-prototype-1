@@ -287,6 +287,8 @@ fn switch(routes: Route) -> Html {
                                 if let Ok(Some(session)) = resp.json::<Option<String>>().await {
                                     LocalStorage::set("session", session).unwrap();
                                     set_text_str("a", "created!");
+
+                                    set_text("login-status", format!("signed in as {username}"));
                                 } else {
                                     set_text_str("a", "no session fetched");
                                 }
