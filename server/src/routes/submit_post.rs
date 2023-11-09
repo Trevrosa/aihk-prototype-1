@@ -109,7 +109,13 @@ fn get_advice(input: &str) -> String {
             }
 
             match chat.call_method("create", ("gpt-3.5-turbo",), Some(build_args)) {
-                Ok(res) => return res.to_string(),
+                Ok(res) => {
+                    if res.contains("chatbase.co").unwrap() {
+                        tracing::error!("ai error: wrong response, retry {i}");
+                        continue;
+                    }
+                    return res.to_string()
+                },
                 Err(err) => {
                     tracing::error!("ai error: {}, retry {i}", err.value(py));
                     continue;
