@@ -28,7 +28,8 @@ pub async fn route(
     }
 
     let analysis = Censor::from_str(&input.content).analyze();
-    if analysis.is(Type::SEXUAL | Type::OFFENSIVE) {
+    if analysis.is((Type::SEXUAL & Type::MODERATE_OR_HIGHER) | Type::OFFENSIVE | Type::MEAN) {
+        tracing::info!("{:?} commented: {analysis:?}", session.unwrap().username);
         return (StatusCode::FORBIDDEN, "Cannot say that".to_string());
     }
 
